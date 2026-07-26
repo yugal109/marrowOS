@@ -6,7 +6,7 @@ SECTIONS
     .asm : ALIGN(4096)
     {
         *(.asm)
-    } 
+    }
     .text : ALIGN(4096)
     {
         *(.text)
@@ -24,6 +24,4 @@ SECTIONS
         *(COMMON)
         *(.bss)
     }
-   
-
 }
