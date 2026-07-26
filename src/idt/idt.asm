@@ -8,7 +8,17 @@ global idt_load
 global idt_zero
 global int21h
 global no_interrupt
+global enable_interrupts
+global disable_interrupts
 
+enable_interrupts:
+    sti
+    ret
+
+disable_interrupts:
+    sti
+    ret
+å
 idt_load:
     push ebp
     mov ebp,esp
