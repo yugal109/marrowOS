@@ -1,0 +1,35 @@
+# Build output
+/bin/
+/build/
+*.o
+*.bin
+*.iso
+*.img
+*.elf
+
+# Assembler / linker intermediates
+*.lst
+*.map
+
+# Debug
+*.dSYM/
+*.su
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editor / IDE
+*.swp
+*.swo
+*~
+.idea/
+*.code-workspace
+
+# Logs and temp
+*.log
+*.tmp
+*.bak
+
+.vscode
