@@ -16,9 +16,9 @@ enable_interrupts:
     ret
 
 disable_interrupts:
-    sti
+    cli
     ret
-å
+
 idt_load:
     push ebp
     mov ebp,esp
