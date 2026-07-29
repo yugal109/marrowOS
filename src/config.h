@@ -15,4 +15,7 @@
 // refer osdev.org to where this address came from ?
 #define MARROWOS_HEAP_TABLE_ADDRESS 0x00007E00
 
+// sector size in normal hard disk
+#define MARROWOS_SECTOR_SIZE 512
+
 #endif
