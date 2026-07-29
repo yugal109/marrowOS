@@ -1,4 +1,4 @@
-#ifndef DISH_H
+#ifndef DISK_H
 #define DISK_H
 
 typedef unsigned int MARROWOS_DISK_TYPE;
