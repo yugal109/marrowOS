@@ -94,6 +94,7 @@ void disk_search_and_init()
     disk.type = MARROWOS_DISK_TYPE_REAL;
     disk.sector_size = MARROWOS_SECTOR_SIZE;
     disk.filesystem = fs_resolve(&disk);
+    disk.id = 0;
 }
 
 struct disk *disk_get(int index)
