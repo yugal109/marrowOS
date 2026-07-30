@@ -4,11 +4,100 @@ BITS 16
 CODE_SEG equ gdt_code - gdt_start
 DATA_SEG equ gdt_data - gdt_start
 
-_start:
-    jmp short start
-    nop
+jmp short start
+nop
 
- times 33 db 0
+
+; FAT 16 Header  (BIOS Parameter Block — starts right after jmp/nop at byte 3)
+
+OEMIdentifier     db 'MARROWOS'
+; 8-byte OEM name. Not used for mounting math; some tools just display it.
+; Must be exactly 8 bytes (pad with spaces if shorter).
+
+BytesPerSector    dw 0x200
+; Size of one sector in bytes. 0x200 = 512.
+; Almost everything on disk is counted in these units.
+
+SectorsPerCluster db 0x80
+; How many sectors make one cluster (FAT's allocation unit).
+; 0x80 = 128 sectors → 128 * 512 = 64KB per cluster.
+; Files grow in whole clusters.
+
+ReservedSectors   dw 200
+; Sectors at the start of the volume BEFORE the first FAT.
+; Includes this boot sector (sector 0).
+; You use ~199 of these for kernel.bin so FATs start at sector 200.
+
+FATcopies         db 0x02
+; Number of File Allocation Table copies.
+; 2 = primary FAT + backup (normal FAT12/16).
+
+RootDirEntries    dw 0x40
+; Max number of entries in the ROOT directory (FAT16 fixed root).
+; 0x40 = 64 entries. Each entry is 32 bytes → root dir size = 64*32 = 2048 bytes = 4 sectors.
+
+NumSectors        dw 0x00
+; 16-bit total sector count of the volume.
+; 0 means "too big for 16 bits — use SectorsBig instead".
+
+MediaType         db 0xF8
+; Media descriptor. 0xF8 = fixed hard disk (not floppy).
+; First FAT entry is often related to this value.
+
+SectorsPerFat     dw 0x100
+; Size of ONE FAT, in sectors.
+; 0x100 = 256 sectors → each FAT is 256 * 512 = 128KB.
+; With FATcopies=2, FATs take 512 sectors total.
+
+SectorsPerTrack   dw 0x20
+; CHS geometry: sectors per track (old BIOS). 0x20 = 32.
+; Mostly unused in pure LBA; still part of the BPB.
+
+NumberOfHeads     dw 0x40
+; CHS geometry: number of heads. 0x40 = 64.
+; Same — legacy field.
+
+HiddenSectors     dd 0x00
+; Sectors before this partition starts (for partitioned disks).
+; 0 = volume starts at LBA 0 of the drive/image (your os.bin case).
+
+SectorsBig        dd 0x773594
+; 32-bit total sector count (used when NumSectors == 0).
+; Defines how large the volume claims to be.
+
+
+; Extended BPB (DOS 4.0+) — continues the boot sector metadata
+
+DriveNumber       db 0x80
+; BIOS drive number. 0x80 = first hard disk.
+; 0x00 would be first floppy.
+
+WinNTbit          db 0x00
+; Reserved / "dirty" bit used by Windows NT; usually 0.
+
+Signature         db 0x29
+; Extended boot signature. 0x29 means the following 3 fields are valid
+; (VolumeID, VolumeIDString, SystemIDString).
+
+VolumeID          dd 0xD105
+; NOTE: Volume ID is normally a 4-byte (dd) serial number.
+; As written this is only 1 byte — usually you'd want: dd 0xD105...
+; Serial shown by OS for the volume; not critical for reading FAT.
+
+VolumeIDString    db 'MARROWOSBOO'
+; 11-byte volume label (like the name of the disk).
+; Must be exactly 11 bytes.
+
+SystemIDString    db 'FAT16   '
+; 8-byte FS type string. Must be exactly 8 bytes (space-padded).
+; Tells tools/humans this is FAT16. Your driver will still trust the BPB numbers more than this string.
+
+
+
+
+
+
+
  
 start:
     jmp 0:step2
