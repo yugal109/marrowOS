@@ -18,4 +18,9 @@
 // sector size in normal hard disk
 #define MARROWOS_SECTOR_SIZE 512
 
+// total file systems supported by our kernel
+#define MARROWOS_MAX_FILESYSTEMS 12
+
+#define MARROWOS_MAX_FILE_DESCRIPTORS 512
+
 #endif
