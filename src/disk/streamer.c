@@ -36,7 +36,7 @@ int disk_streamer_read(struct disk_stream *stream, void *out, int total)
         goto out;
     }
 
-    int total_to_read = total > MARROWOS_SECTOR_SIZE ? MARROWOS_SECTOR_SIZE : total;
+    int total_to_read = total > MARROWOS_SECTOR_SIZE - offset ? MARROWOS_SECTOR_SIZE - offset : total;
     for (int i = 0; i < total_to_read; i++)
     {
         *(char *)out++ = buf[offset + i];
@@ -44,9 +44,9 @@ int disk_streamer_read(struct disk_stream *stream, void *out, int total)
 
     // Adjust the stream
     stream->pos += total_to_read;
-    if (total > MARROWOS_SECTOR_SIZE)
+    if (total > total_to_read)
     {
-        res = disk_streamer_read(stream, out, total - MARROWOS_SECTOR_SIZE);
+        res = disk_streamer_read(stream, out, total - total_to_read);
     }
 
 out:

@@ -23,4 +23,6 @@
 
 #define MARROWOS_MAX_FILE_DESCRIPTORS 512
 
+#define MARROWOS_MAX_PATH 108
+
 #endif

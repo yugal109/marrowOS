@@ -74,6 +74,7 @@ static int file_new_descriptor(struct file_descriptor **desc_out)
             desc->index = i + 1;
             file_descriptors[i] = desc;
             *desc_out = desc;
+            res = 0;
             break;
         }
     }
@@ -82,7 +83,7 @@ static int file_new_descriptor(struct file_descriptor **desc_out)
 
 static struct file_descriptor *file_get_descriptor(int fd)
 {
-    if (fd <= 0 || fd >= MARROWOS_MAX_FILE_DESCRIPTORS)
+    if (fd <= 0 || fd > MARROWOS_MAX_FILE_DESCRIPTORS)
     {
         return 0;
     }
@@ -95,7 +96,7 @@ static struct file_descriptor *file_get_descriptor(int fd)
 struct filesystem *fs_resolve(struct disk *disk)
 {
     struct filesystem *fs = 0;
-    for (int i = 0; i <= MARROWOS_MAX_FILESYSTEMS; i++)
+    for (int i = 0; i < MARROWOS_MAX_FILESYSTEMS; i++)
     {
         if (filesystems[i] != 0 && filesystems[i]->resolve(disk) == 0)
         {
@@ -184,5 +185,27 @@ out:
     {
         res = 0;
     }
+    return res;
+}
+
+int fread(void *ptr, uint32_t size, uint32_t nmemb, int fd)
+{
+    int res = 0;
+    if (size == 0 || nmemb == 0 || fd < 1)
+    {
+        res = -EINVARG;
+        goto out;
+    }
+
+    struct file_descriptor *desc = file_get_descriptor(fd);
+    if (!desc)
+    {
+        res = -EINVARG;
+        goto out;
+    }
+
+    res = desc->filesystem->read(desc->disk, desc->private, size, nmemb, (char *)ptr);
+
+out:
     return res;
 }

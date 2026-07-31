@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include "idt/idt.h"
 #include "io/io.h"
+#include "memory/memory.h"
 #include "memory/heap/kheap.h"
 #include "memory/paging/paging.h"
 #include "disk/disk.h"
@@ -100,10 +101,20 @@ void kernel_main()
     // enable the system interrupts
     enable_interrupts();
 
-    struct disk_stream *stream = disk_streamer_new(0);
-    disk_streamer_seek(stream, 0x201);
-    unsigned char c = 0;
-    disk_streamer_read(stream, &c, 1);
+    int fd = fopen("0:/hello.txt", "r");
+    if (fd)
+    {
+        print("\n we opened hello.txt \n");
+        char buf[15];
+        memset(buf, 0, sizeof(buf));
+        fread(buf, sizeof(buf) - 1, 1, fd);
+        print(buf);
+    }
+    else
+    {
+        print("\n failed to open hello.txt \n");
+    }
+
     while (1)
     {
     }
