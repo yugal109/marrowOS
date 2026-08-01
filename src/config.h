@@ -25,4 +25,6 @@
 
 #define MARROWOS_MAX_PATH 108
 
+#define MARROWOS_TOTAL_GDT_SEGMENTS 3
+
 #endif
