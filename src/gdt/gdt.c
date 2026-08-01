@@ -11,7 +11,7 @@ void encodeGdtEntry(uint8_t *target, struct gdt_structured source)
     target[6] = 0x40;
     if (source.limit > 65536)
     {
-        source.limit = source.limit >> 13;
+        source.limit = source.limit >> 12;
         target[6] = 0xC0;
     }
 
