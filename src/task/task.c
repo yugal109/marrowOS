@@ -3,6 +3,7 @@
 #include "memory/paging/paging.h"
 #include "memory/heap/kheap.h"
 #include "status.h"
+#include "process.h"
 #include "kernel.h"
 #include "config.h"
 
@@ -12,6 +13,8 @@ struct task *current_task = 0;
 // Task linked list
 struct task *task_tail = 0;
 struct task *task_head = 0;
+
+int task_init(struct task *task, struct process *process);
 
 struct task *task_current()
 {
@@ -59,7 +62,7 @@ int task_free(struct task *task)
     return 0;
 }
 
-struct task *task_new()
+struct task *task_new(struct process *process)
 {
     int res = 0;
     struct task *task = kzalloc(sizeof(struct task));
@@ -68,7 +71,7 @@ struct task *task_new()
         res = -ENOMEM;
         goto out;
     }
-    res = task_init(task);
+    res = task_init(task, process);
     if (res != MARROWOS_ALL_OK)
     {
         goto out;
@@ -95,7 +98,7 @@ out:
     return task;
 }
 
-int task_init(struct task *task)
+int task_init(struct task *task, struct process *process)
 {
     memset(task, 0, sizeof(struct task));
 
@@ -108,6 +111,7 @@ int task_init(struct task *task)
     task->registers.ip = MARROWOS_PROGRAM_VIRTUAL_ADDRESS;
     task->registers.ss = USER_DATA_SEGMENT;
     task->registers.esp = MARROWOS_PROGRAM_VIRTUAL_STACK_ADDRESS_START;
+    task->process = process;
 
     return 0;
 }
