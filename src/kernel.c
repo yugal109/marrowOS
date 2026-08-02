@@ -11,6 +11,7 @@
 #include "string/string.h"
 #include "disk/streamer.h"
 #include "gdt/gdt.h"
+#include "task/tss.h"
 #include "fs/file.h"
 #include "config.h"
 
@@ -82,6 +83,7 @@ void panic(const char *msg)
     };
 }
 
+struct tss tss;
 struct gdt gdt_real[MARROWOS_TOTAL_GDT_SEGMENTS];
 struct gdt_structured gdt_structured[MARROWOS_TOTAL_GDT_SEGMENTS] = {
     {.base = 0x00,
@@ -93,6 +95,18 @@ struct gdt_structured gdt_structured[MARROWOS_TOTAL_GDT_SEGMENTS] = {
     {.base = 0x00,
      .limit = 0xffffffff,
      .type = 0x092}, // Kernel Data Segment
+    {
+        .base = 0x00,
+        .limit = 0xffffffff,
+        .type = 0xF8}, // User Code Segment
+    {
+        .base = 0x00,
+        .limit = 0xffffffff,
+        .type = 0xF2}, // User Data Segment
+    {
+        .base = (uint32_t)&tss,
+        .limit = sizeof(tss),
+        .type = 0xE9}, // TSS Segment
 
 };
 
@@ -105,7 +119,7 @@ void kernel_main()
     gdt_structured_to_gdt(gdt_real, gdt_structured, MARROWOS_TOTAL_GDT_SEGMENTS);
 
     // Load the gdt
-    gdt_load(gdt_real, sizeof(gdt_real)-1);
+    gdt_load(gdt_real, sizeof(gdt_real) - 1);
 
     // Initialize the heap
     kheap_init();
@@ -118,6 +132,14 @@ void kernel_main()
 
     // Initialize the interrupt descriptor table
     idt_init();
+
+    // Setup the TSS
+    memset(&tss, 0x00, sizeof(tss));
+    tss.esp0 = 0x600000; // this is the kernel stack
+    tss.ss0 = KERNEL_DATA_SELECTOR;
+
+    // Load the tss
+    tss_load(0x28);
 
     // Setup paging
     kernel_chunk = paging_new_4gb(PAGING_IS_WRITABLE | PAGING_IS_PRESENT | PAGING_ACCESS_FROM_ALL);
