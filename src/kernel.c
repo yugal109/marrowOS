@@ -10,9 +10,12 @@
 #include "fs/pparser.h"
 #include "string/string.h"
 #include "disk/streamer.h"
+#include "task/task.h"
+#include "task/process.h"
 #include "gdt/gdt.h"
 #include "task/tss.h"
 #include "fs/file.h"
+#include "status.h"
 #include "config.h"
 
 uint16_t *video_mem = 0;
@@ -150,24 +153,16 @@ void kernel_main()
     // enable paging
     enable_paging();
 
+    struct process *process = 0;
+    int res = process_load("0:/blank.bin", &process);
+
+    if (res != MARROWOS_ALL_OK)
+    {
+        panic("Failed to load blank.bin \n");
+    }
+
+    task_run_first_ever_task();
+
     // enable the system interrupts
-    enable_interrupts();
-
-    int fd = fopen("0:/hello.txt", "r");
-    if (fd)
-    {
-        print("\n we opened hello.txt \n");
-        char buf[15];
-        memset(buf, 0, sizeof(buf));
-        fread(buf, sizeof(buf) - 1, 1, fd);
-        print(buf);
-    }
-    else
-    {
-        print("\n failed to open hello.txt \n");
-    }
-
-    while (1)
-    {
-    }
+    // enable_interrupts();
 }
