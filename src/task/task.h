@@ -3,6 +3,8 @@
 #include "config.h"
 #include "memory/paging/paging.h"
 
+struct interrupt_frame;
+
 struct registers
 {
     uint32_t edi;
@@ -50,5 +52,6 @@ void restore_general_purpose_registers(struct registers *regs);
 void user_registers();
 int task_switch(struct task *task);
 int task_page();
+void task_current_save_state(struct interrupt_frame *frame);
 
 #endif

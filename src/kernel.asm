@@ -5,6 +5,7 @@ section .asm
 extern kernel_main
 
 global _start 
+global kernel_registers
 global problem
 
 CODE_SEG equ 0x08
@@ -44,5 +45,12 @@ problem:
     ret
 
 
+kernel_registers:
+    mov ax,0x10
+    mov ds,ax
+    mov es,ax
+    mov gs,ax
+    mov fs,ax
+    ret
 
 times 512-($ - $$) db 0

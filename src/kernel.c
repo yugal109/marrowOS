@@ -15,6 +15,7 @@
 #include "gdt/gdt.h"
 #include "task/tss.h"
 #include "fs/file.h"
+#include "idt/idt.h"
 #include "status.h"
 #include "config.h"
 
@@ -85,6 +86,12 @@ void panic(const char *msg)
     {
     };
 }
+
+void kernel_page()
+{
+    kernel_registers();
+    paging_switch(kernel_chunk);
+};
 
 struct tss tss;
 struct gdt gdt_real[MARROWOS_TOTAL_GDT_SEGMENTS];
