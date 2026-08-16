@@ -122,11 +122,6 @@ struct gdt_structured gdt_structured[MARROWOS_TOTAL_GDT_SEGMENTS] = {
 
 };
 
-void pic_timer_callback(struct interrupt_frame *frame)
-{
-    print("timer activated\n");
-}
-
 void kernel_main()
 {
     terminal_initialize();
@@ -172,8 +167,6 @@ void kernel_main()
     // Initialize all the system keyboards
     keyboard_init();
 
-    idt_register_interrupt_callback(0x20, pic_timer_callback);
-
     struct process *process = 0;
     int res = process_load_switch("0:/blank.bin", &process);
 
@@ -182,7 +175,6 @@ void kernel_main()
         panic("Failed to load blank.bin \n");
     }
 
-    keyboard_push('A');
     task_run_first_ever_task();
 
     // enable the system interrupts
