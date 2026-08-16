@@ -127,7 +127,7 @@ int task_save_state(struct task *task, struct interrupt_frame *frame)
 
 int copy_string_from_task(struct task *task, void *virtual, void *phys, int max)
 {
-    if (max >= PAGING_TOTAL_ENTRIES_PER_TABLE)
+    if (max >= PAGING_PAGE_SIZE)
     {
         return -EINVARG;
     }
