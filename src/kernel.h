@@ -10,6 +10,7 @@ void print(const char *str);
 void panic(const char *msg);
 void kernel_page();
 void kernel_registers();
+void terminal_writechar(char c, char color);
 
 #define ERROR(value) (void *)(value)
 #define ERROR_I(value) (int)(value)
