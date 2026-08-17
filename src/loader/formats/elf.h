@@ -28,10 +28,10 @@
 #define SHT_REL 9
 #define SHT_SHLIB 10
 #define SHT_DYNSYM 11
-#define SHT_LOPROC 0x70000000
-#define SHT_HIPROC 0x7fffffff
-#define SHT_LOUSER 0x80000000
-#define SHT_HIUSER 0xffffffff
+#define SHT_LOPROC 12
+#define SHT_HIPROC 13
+#define SHT_LOUSER 14
+#define SHT_HIUSER 15
 
 #define ET_NONE 0
 #define ET_REL 1
@@ -57,7 +57,7 @@ typedef uint16_t elf32_half;
 typedef uint32_t elf32_word;
 typedef int32_t elf32_sword;
 typedef uint32_t elf32_addr;
-typedef uint32_t elf32_off;
+typedef int32_t elf32_off;
 
 struct elf32_phdr
 {
@@ -76,8 +76,8 @@ struct elf32_shdr
     elf32_word sh_name;
     elf32_word sh_type;
     elf32_word sh_flags;
-    elf32_word sh_addr;
-    elf32_word sh_offset;
+    elf32_addr sh_addr;
+    elf32_off sh_offset;
     elf32_word sh_size;
     elf32_word sh_link;
     elf32_word sh_info;
@@ -108,10 +108,10 @@ struct elf32_dyn
     elf32_sword d_tag;
     union
     {
-
         elf32_word d_val;
         elf32_addr d_ptr;
     } d_un;
+
 } __attribute__((packed));
 
 struct elf32_sym
@@ -123,5 +123,8 @@ struct elf32_sym
     unsigned char st_other;
     elf32_half st_shndx;
 } __attribute__((packed));
+
+void *elf_get_entry_ptr(struct elf_header *elf_header);
+uint32_t elf_get_entry(struct elf_header *elf_header);
 
 #endif
