@@ -1,5 +1,5 @@
 ENTRY(_start)
-OUTPUT_FORMAT(binary)
+OUTPUT_FORMAT(elf32-i386)
 SECTIONS
 {
     /* start of user program virtual memory ? remember ?  */
