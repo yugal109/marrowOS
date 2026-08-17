@@ -5,6 +5,10 @@
 #include "task.h"
 #include "config.h"
 
+#define PROCESS_FILE_TYPE_ELF 0
+#define PROCESS_FILE_TYPE_BINARY 1
+
+typedef unsigned char PROCESS_FILE_TYPE;
 struct process
 {
 
@@ -19,8 +23,13 @@ struct process
     // The memory (malloc) allocations of the process
     void *allocations[MARROWOS_MAX_PROGRAM_ALLOCATION];
 
-    // The physical pointer to the process memory
-    void *ptr;
+    PROCESS_FILE_TYPE filetype;
+    union
+    {
+        // The physical pointer to the process memory
+        void *ptr;
+        struct elf_file *elf_file;
+    };
 
     // The physical pointer to the stack memory
     void *stack;
