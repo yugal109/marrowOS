@@ -9,7 +9,7 @@ all: ./bin/boot.bin ./bin/kernel.bin user_programs
 	dd if=/dev/zero bs=1048576 count=16 >> ./bin/os.bin
 	# Initialize FAT16 (keep our boot sector) and put blank.bin on the volume
 	MTOOLS_SKIP_CHECK=1 mformat -i ./bin/os.bin -B ./bin/boot.bin -R 200 -c 128 -r 64 ::
-	MTOOLS_SKIP_CHECK=1 mcopy -i ./bin/os.bin -o ./programs/blank/blank.bin ::blank.bin
+	MTOOLS_SKIP_CHECK=1 mcopy -i ./bin/os.bin -o ./programs/blank/blank.elf ::blank.elf
 
 
 ./bin/kernel.bin: $(FILES)

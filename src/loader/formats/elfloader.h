@@ -12,7 +12,7 @@ struct elf_file
     int in_memory_size;
 
     // The physical memory address that this elf file is loaded at
-    void elf_memory;
+    void *elf_memory;
 
     // The virtual base address of this binary
     void *virtual_base_address;
@@ -26,5 +26,8 @@ struct elf_file
     // The physical end address of this binary
     void *physical_end_address;
 };
+
+int elf_load(const char *filename, struct elf_file **file_out);
+void elf_close(struct elf_file *file);
 
 #endif
