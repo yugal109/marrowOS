@@ -7,6 +7,7 @@
 #include "kernel.h"
 #include "config.h"
 #include "string/string.h"
+#include "loader/formats/elfloader.h"
 #include "idt/idt.h"
 
 // The current task that is running
@@ -208,6 +209,11 @@ int task_init(struct task *task, struct process *process)
         return -EIO;
     }
     task->registers.ip = MARROWOS_PROGRAM_VIRTUAL_ADDRESS;
+    if (process->filetype == PROCESS_FILE_TYPE_ELF)
+    {
+
+        task->registers.ip = elf_header(process->elf_file)->e_entry;
+    }
     task->registers.ss = USER_DATA_SEGMENT;
     task->registers.cs = USER_CODE_SEGMENT;
     task->registers.esp = MARROWOS_PROGRAM_VIRTUAL_STACK_ADDRESS_START;
