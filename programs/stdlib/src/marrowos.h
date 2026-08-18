@@ -10,5 +10,6 @@ void marrowos_free(void *ptr);
 void marrowos_putchar(char c);
 int marrowos_getkey_block();
 void marrowos_terminal_readline(char *out, int max, bool output_while_typing);
+void marrowos_process_load_start(const char *filename);
 
 #endif
