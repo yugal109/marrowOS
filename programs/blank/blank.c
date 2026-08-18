@@ -12,12 +12,12 @@ int main(int argc, char **argv)
     yfree(ptr);
     putchar('Z');
     printf("My age is %i\n", 24);
+
+    char buf[1024];
+    marrowos_terminal_readline(buf, sizeof(buf), true);
+    print(buf);
     while (1)
     {
-        if (getkey() != 0)
-        {
-            print("key was pressed\n");
-        }
     };
     return 0;
 }

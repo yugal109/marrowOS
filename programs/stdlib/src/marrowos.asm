@@ -2,7 +2,7 @@
 
 section .asm
 global print:function
-global getkey:function
+global marrowos_getkey:function
 global marrowos_malloc:function
 global marrowos_free:function
 global marrowos_putchar:function
@@ -19,8 +19,8 @@ print:
     pop ebp
     ret
 
-; int getkey()
-getkey:
+; int marrowos_getkey()
+marrowos_getkey:
     push ebp
     mov ebp, esp
     mov eax,2 ; Command getkey
