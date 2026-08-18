@@ -1,21 +1,17 @@
 #include "marrowos.h"
 #include "stdlib.h"
 #include "stdio.h"
+#include "string.h"
 
 int main(int argc, char **argv)
 {
-    print("Hello how are you!\n");
-    void *ptr = yreserve(16);
-    printf("age %d hex %x ptr %p ch %c str %s\n", 24, 255, ptr, 'Z', "hi");
-    printf("%% ull %llu\n", 123ULL);
-    print(itoa(8763));
-    yfree(ptr);
-    putchar('Z');
-    printf("My age is %i\n", 24);
-
-    char buf[1024];
-    marrowos_terminal_readline(buf, sizeof(buf), true);
-    print(buf);
+    char words[] = "hello how are you";
+    const char *token = strtok(words, " ");
+    while (token)
+    {
+        printf("%s\n", token);
+        token = strtok(NULL, " ");
+    }
     while (1)
     {
     };
