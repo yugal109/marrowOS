@@ -10,6 +10,7 @@ all: ./bin/boot.bin ./bin/kernel.bin user_programs
 	# Initialize FAT16 (keep our boot sector) and put blank.bin on the volume
 	MTOOLS_SKIP_CHECK=1 mformat -i ./bin/os.bin -B ./bin/boot.bin -R 200 -c 128 -r 64 ::
 	MTOOLS_SKIP_CHECK=1 mcopy -i ./bin/os.bin -o ./programs/blank/blank.elf ::blank.elf
+	MTOOLS_SKIP_CHECK=1 mcopy -i ./bin/os.bin -o ./programs/shell/shell.elf ::shell.elf
 
 
 ./bin/kernel.bin: $(FILES)
@@ -117,10 +118,12 @@ all: ./bin/boot.bin ./bin/kernel.bin user_programs
 user_programs:
 	cd ./programs/stdlib && $(MAKE) all
 	cd ./programs/blank && $(MAKE) all
+	cd ./programs/shell && $(MAKE) all
 
 user_programs_clean:
 	cd ./programs/stdlib && $(MAKE) clean
 	cd ./programs/blank && $(MAKE) clean
+	cd ./programs/shell && $(MAKE) clean
 
 clean: user_programs_clean
 	rm -rf ./bin/boot.bin 
