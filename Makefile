@@ -1,4 +1,4 @@
-FILES = ./build/kernel.asm.o ./build/kernel.o ./build/disk/disk.o ./build/idt/idt.asm.o ./build/memory/memory.o ./build/idt/idt.o ./build/keyboard/keyboard.o ./build/keyboard/classic.o ./build/isr80h/isr80h.o ./build/isr80h/misc.o ./build/isr80h/io.o ./build/task/task.o ./build/task/task.asm.o ./build/task/process.o ./build/loader/formats/elf.o ./build/loader/formats/elfloader.o ./build/io/io.asm.o ./build/gdt/gdt.asm.o ./build/gdt/gdt.o ./build/task/tss.asm.o ./build/memory/heap/heap.o ./build/memory/heap/kheap.o ./build/fs/pparser.o ./build/fs/file.o ./build/fs/fat/fat16.o ./build/string/string.o ./build/disk/streamer.o ./build/memory/paging/paging.o ./build/memory/paging/paging.asm.o ./build/video/vga13.o
+FILES = ./build/kernel.asm.o ./build/kernel.o ./build/disk/disk.o ./build/idt/idt.asm.o ./build/memory/memory.o ./build/idt/idt.o ./build/keyboard/keyboard.o ./build/keyboard/classic.o ./build/isr80h/isr80h.o ./build/isr80h/heap.o ./build/isr80h/misc.o ./build/isr80h/io.o ./build/task/task.o ./build/task/task.asm.o ./build/task/process.o ./build/loader/formats/elf.o ./build/loader/formats/elfloader.o ./build/io/io.asm.o ./build/gdt/gdt.asm.o ./build/gdt/gdt.o ./build/task/tss.asm.o ./build/memory/heap/heap.o ./build/memory/heap/kheap.o ./build/fs/pparser.o ./build/fs/file.o ./build/fs/fat/fat16.o ./build/string/string.o ./build/disk/streamer.o ./build/memory/paging/paging.o ./build/memory/paging/paging.asm.o
 INCLUDES = -I./src
 FLAGS= -g -ffreestanding -falign-jumps -falign-functions -falign-labels -falign-loops -fstrength-reduce -fomit-frame-pointer -finline-functions -Wno-unused-function -fno-builtin -Werror -Wno-unused-label -Wno-cpp -Wno-unused-parameter -nostdlib -nostartfiles -nodefaultlibs -Wall -O0 -Iinc
 
@@ -31,6 +31,9 @@ all: ./bin/boot.bin ./bin/kernel.bin user_programs
 ./build/isr80h/isr80h.o: ./src/isr80h/isr80h.c
 	i686-elf-gcc $(INCLUDES) -I./src/isr80h $(FLAGS) -std=gnu99 -c ./src/isr80h/isr80h.c -o ./build/isr80h/isr80h.o
 
+./build/isr80h/heap.o: ./src/isr80h/heap.c
+	i686-elf-gcc $(INCLUDES) -I./src/isr80h $(FLAGS) -std=gnu99 -c ./src/isr80h/heap.c -o ./build/isr80h/heap.o
+
 ./build/isr80h/misc.o: ./src/isr80h/misc.c
 	i686-elf-gcc $(INCLUDES) -I./src/isr80h $(FLAGS) -std=gnu99 -c ./src/isr80h/misc.c -o ./build/isr80h/misc.o
 
@@ -56,10 +59,6 @@ all: ./bin/boot.bin ./bin/kernel.bin user_programs
 
 ./build/kernel.o: ./src/kernel.c
 	i686-elf-gcc $(INCLUDES) $(FLAGS) -std=gnu99 -c ./src/kernel.c -o ./build/kernel.o
-
-./build/video/vga13.o: ./src/video/vga13.c
-	mkdir -p ./build/video
-	i686-elf-gcc $(INCLUDES) -I./src/video $(FLAGS) -std=gnu99 -c ./src/video/vga13.c -o ./build/video/vga13.o
 
 ./build/io/io.asm.o: ./src/io/io.asm
 	nasm -f elf -g ./src/io/io.asm -o ./build/io/io.asm.o

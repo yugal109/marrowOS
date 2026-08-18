@@ -1,8 +1,13 @@
 #include "marrowos.h"
+#include "stdlib.h"
 
 int main(int argc, char **argv)
 {
     print("Hello how are you!\n");
+    void *ptr = yreserve(16);
+    if (ptr)
+    {
+    };
     while (1)
     {
         if (getkey() != 0)
