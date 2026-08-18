@@ -5,6 +5,7 @@ global print:function
 global getkey:function
 global marrowos_malloc:function
 global marrowos_free:function
+global marrowos_putchar:function
 
 ; void print(const char* message)
 print:
@@ -24,6 +25,17 @@ getkey:
     mov ebp, esp
     mov eax,2 ; Command getkey
     int 0x80
+    pop ebp
+    ret
+
+; void putchar(char c);
+marrowos_putchar:
+    push ebp
+    mov ebp,esp
+    mov eax,3 ; Command putchar
+    push dword [ebp+8] ; Variable "c"
+    int 0x80
+    add esp,4
     pop ebp
     ret
 

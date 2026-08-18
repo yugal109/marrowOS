@@ -1,5 +1,6 @@
 #include "marrowos.h"
 #include "stdlib.h"
+#include "stdio.h"
 
 int main(int argc, char **argv)
 {
@@ -7,6 +8,7 @@ int main(int argc, char **argv)
     void *ptr = yreserve(16);
     print(itoa(8763));
     yfree(ptr);
+    putchar('Z');
     while (1)
     {
         if (getkey() != 0)
