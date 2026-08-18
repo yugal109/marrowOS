@@ -3,6 +3,6 @@
 #include <stddef.h>
 
 void *yreserve(size_t size);
-void free(void *ptr);
+void yfree(void *ptr);
 
 #endif

@@ -6,6 +6,7 @@ void *yreserve(size_t size)
     return marrowos_malloc(size);
 };
 
-void free(void *ptr) {
-
+void yfree(void *ptr)
+{
+    marrowos_free(ptr);
 };

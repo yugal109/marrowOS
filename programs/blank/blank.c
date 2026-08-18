@@ -5,9 +5,7 @@ int main(int argc, char **argv)
 {
     print("Hello how are you!\n");
     void *ptr = yreserve(16);
-    if (ptr)
-    {
-    };
+    yfree(ptr);
     while (1)
     {
         if (getkey() != 0)
