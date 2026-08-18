@@ -4,5 +4,6 @@
 
 void *yreserve(size_t size);
 void yfree(void *ptr);
+char *itoa(int i);
 
 #endif
