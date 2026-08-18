@@ -1,6 +1,7 @@
 #ifndef MARROWOS_H
 #define MARROWOS_H
 
-void print(const char* message);
+void print(const char *message);
+int getkey();
 
 #endif

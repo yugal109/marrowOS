@@ -1,6 +1,7 @@
 [BITS 32]
 
 global print:function
+global getkey:function
 
 ; void print(const char* message)
 print:
@@ -14,3 +15,11 @@ print:
     pop ebp
     ret
 
+; int getkey()
+getkey:
+    push ebp
+    mov ebp, esp
+    mov eax,2 ; Command getkey
+    int 0x80
+    pop ebp
+    ret
