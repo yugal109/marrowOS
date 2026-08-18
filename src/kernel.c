@@ -195,7 +195,7 @@ void kernel_main()
 
     if (res != MARROWOS_ALL_OK)
     {
-        panic("Failed to load blank.bin \n");
+        panic("Failed to load blank file.\n");
     }
 
     task_run_first_ever_task();
