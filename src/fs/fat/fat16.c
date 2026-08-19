@@ -209,6 +209,7 @@ out:
 int fat16_get_root_directory(struct disk *disk, struct fat_private *fat_private, struct fat_directory *directory)
 {
     int res = 0;
+    struct fat_directory_item *dir = 0x00;
     struct fat_header *primary_header = &fat_private->header.primary_header;
 
     // equation used to calculate the root directory position ( first sector )
@@ -225,11 +226,11 @@ int fat16_get_root_directory(struct disk *disk, struct fat_private *fat_private,
 
     int total_items = fat16_get_total_items_for_directory(disk, root_dir_sector_pos);
 
-    struct fat_directory_item *dir = kzalloc(root_dir_size);
+    dir = kzalloc(root_dir_size);
     if (!dir)
     {
         res = -ENOMEM;
-        goto out;
+        goto err_out;
     }
 
     struct disk_stream *stream = fat_private->directory_stream;
@@ -237,13 +238,13 @@ int fat16_get_root_directory(struct disk *disk, struct fat_private *fat_private,
     if (disk_streamer_seek(stream, fat16_sector_to_absolute(disk, root_dir_sector_pos)) != MARROWOS_ALL_OK)
     {
         res = -EIO;
-        goto out;
+        goto err_out;
     }
 
     if (disk_streamer_read(stream, dir, root_dir_size) != MARROWOS_ALL_OK)
     {
         res = -EIO;
-        goto out;
+        goto err_out;
     }
 
     directory->item = dir;
@@ -252,7 +253,12 @@ int fat16_get_root_directory(struct disk *disk, struct fat_private *fat_private,
     directory->ending_sector_pos = root_dir_sector_pos + (root_dir_size / disk->sector_size);
 
 out:
-
+    return res;
+err_out:
+    if (dir)
+    {
+        kfree(dir);
+    }
     return res;
 }
 
@@ -306,29 +312,34 @@ out:
 // Copies bytes from in → *out until NUL or a space (0x20), then if we
 // stopped on a space, writes a terminating NUL. Advances *out so the
 // caller can append more (e.g. '.' + extension) into the same buffer.
-void fat16_to_proper_string(char **out, const char *in)
+void fat16_to_proper_string(char **out, const char *in, size_t size)
 {
+    int i = 0;
     while (*in != 0x00 && *in != 0x20)
     {
         **out = *in;
         *out += 1;
         in += 1;
+
+        // won't process anymore, coz we have exceeded the input buffer size
+        if (i >= size - 1)
+        {
+            break;
+        }
+        i++;
     }
-    if (*in == 0x20)
-    {
-        **out = 0x00;
-    }
+    **out = 0x00;
 }
 
 void fat16_get_full_relative_filename(struct fat_directory_item *item, char *out, int max_len)
 {
     memset(out, 0x00, max_len);
     char *out_tmp = out;
-    fat16_to_proper_string(&out_tmp, (const char *)item->filename);
+    fat16_to_proper_string(&out_tmp, (const char *)item->filename, sizeof(item->filename));
     if (item->ext[0] != 0x00 && item->ext[0] != 0x20)
     {
         *out_tmp++ = '.';
-        fat16_to_proper_string(&out_tmp, (const char *)item->ext);
+        fat16_to_proper_string(&out_tmp, (const char *)item->ext, sizeof(item->ext));
     }
 }
 
@@ -616,27 +627,37 @@ out:
 
 void *fat16_open(struct disk *disk, struct path_part *path, FILE_MODE mode)
 {
+    struct fat_file_descriptor *descriptor = 0;
+    int err_code = 0;
     if (mode != FILE_MODE_READ)
     {
-        return ERROR(-ERDONLY);
+        err_code = -ERDONLY;
+        goto err_out;
     }
 
-    struct fat_file_descriptor *descriptor = 0;
     descriptor = kzalloc(sizeof(struct fat_file_descriptor));
     if (!descriptor)
     {
-        return ERROR(-ENOMEM);
+        err_code = -ENOMEM;
+        goto err_out;
     }
 
     descriptor->item = fat16_get_directory_entry(disk, path);
     if (!descriptor->item)
     {
-        kfree(descriptor);
-        return ERROR(-EIO);
+        err_code = -EIO;
+        goto err_out;
     }
 
     descriptor->pos = 0;
     return descriptor;
+
+err_out:
+    if (descriptor)
+    {
+        kfree(descriptor);
+    }
+    return ERROR(err_code);
 }
 
 static void fat16_free_file_descriptor(struct fat_file_descriptor *desc)
