@@ -108,6 +108,8 @@ step2:
     mov ds, ax
     mov es, ax
     mov ss, ax
+    mov gs,ax
+    mov fs,ax
     mov sp, 0x7c00
     sti ; Enables Interrupts
 
@@ -153,9 +155,24 @@ gdt_descriptor:
  
 [BITS 32]
 load32:
+    mov ax,DATA_SEG
+    mov es,ax
+    mov ds,ax
+    mov ss,ax
+    mov fs,ax
+    mov gs,ax
+ 
+    ; Enable the A20 line
+    in al,0x92
+    or al,2
+    out 0x92, al
+
+    ; For the loading....
     mov eax,1 ; starting sector to load from
     mov ecx,100 ; total sectors we wanna load
     mov edi,0x0100000 ; address where we want to load 
+
+
     call ata_lba_read
     jmp CODE_SEG: 0x0100000
 

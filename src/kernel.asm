@@ -21,10 +21,6 @@ _start:
     mov ebp, 0x00200000
     mov esp, ebp
 
-    ; Enable the A20 line
-    in al,0x92
-    or al,2
-    out 0x92, al
 
     ; Remap the master PIC 
     mov al,00010001b
@@ -32,6 +28,9 @@ _start:
 
     mov al,0x20; Interrupt 0x20 is where master ISR should start
     out 0x21,al
+
+    mov al,0x04 ; ICW3; Slave PIC IRQ line
+    out 0x21, al
 
     mov al,0000001b
     out 0x21,al 

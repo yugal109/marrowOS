@@ -29,6 +29,10 @@ static int pathparser_get_drive_by_path(const char **path)
 static struct path_root *pathparser_create_root(int drive_number)
 {
     struct path_root *path_r = kzalloc(sizeof(struct path_root));
+    if (!path_r)
+    {
+        return NULL;
+    }
     path_r->drive_no = drive_number;
     path_r->first = 0;
     return path_r;
@@ -38,6 +42,10 @@ static const char *pathparser_get_path_part(const char **path)
 {
 
     char *result_path_part = kzalloc(MARROWOS_MAX_PATH);
+    if (!result_path_part)
+    {
+        return NULL;
+    }
     int i = 0;
     while (**path != '/' && **path != 0x00)
     {
@@ -66,6 +74,11 @@ struct path_part *pathparser_parser_path_part(struct path_part *last_part, const
         return 0;
     }
     struct path_part *part = kzalloc(sizeof(struct path_part));
+    if (!part)
+    {
+        kfree((void *)path_part_str);
+        return 0;
+    }
     part->part = path_part_str;
     part->next = 0x00;
 
@@ -92,32 +105,38 @@ void pathparser_free(struct path_root *root)
 struct path_root *pathparser_parse(const char *path, const char *current_directory_path)
 {
     int res = 0;
+    struct path_part *first_part = 0;
+    struct path_part *part = 0;
     const char *temp_path = path;
     struct path_root *path_root = 0;
     if (strlen(path) > MARROWOS_MAX_PATH)
     {
+        res = -1;
         goto out;
     }
     res = pathparser_get_drive_by_path(&temp_path);
     if (res < 0)
     {
+        res = -1;
         goto out;
     }
 
     path_root = pathparser_create_root(res);
     if (!path_root)
     {
+        res = -1;
         goto out;
     }
 
-    struct path_part *first_path = pathparser_parser_path_part(NULL, &temp_path);
-    if (!first_path)
+    first_part = pathparser_parser_path_part(NULL, &temp_path);
+    if (!first_part)
     {
+        res = -1;
         goto out;
     }
 
-    path_root->first = first_path;
-    struct path_part *part = pathparser_parser_path_part(first_path, &temp_path);
+    path_root->first = first_part;
+    part = pathparser_parser_path_part(first_part, &temp_path);
 
     while (part)
     {
@@ -125,5 +144,17 @@ struct path_root *pathparser_parse(const char *path, const char *current_directo
     }
 
 out:
+    if (res < 0)
+    {
+        if (path_root)
+        {
+            kfree(path_root);
+            path_root = NULL;
+        }
+        if (first_part)
+        {
+            kfree(first_part);
+        }
+    }
     return path_root;
 }

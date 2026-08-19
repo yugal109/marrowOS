@@ -24,9 +24,8 @@ task_return: ; (emulating an interrupt here on our own to be able to invoke 'ire
     push dword [ebx+40]
 
     ; push the flags
-    pushf
-    pop eax
-    or eax, 0x200
+    mov eax,[ebx+36]
+    or eax,0x200 ; interrupt enable flag set
     push eax
     
     ; push the code segment

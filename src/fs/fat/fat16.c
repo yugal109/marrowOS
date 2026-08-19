@@ -250,7 +250,7 @@ int fat16_get_root_directory(struct disk *disk, struct fat_private *fat_private,
     directory->item = dir;
     directory->total = total_items;
     directory->sector_pos = root_dir_sector_pos;
-    directory->ending_sector_pos = root_dir_sector_pos + (root_dir_size / disk->sector_size);
+    directory->ending_sector_pos = root_dir_sector_pos + total_sectors;
 
 out:
     return res;
@@ -411,7 +411,7 @@ static int fat16_get_cluster_for_offset(struct disk *disk, int starting_cluster,
     for (int i = 0; i < clusters_ahead; i++)
     {
         int entry = fat16_get_fat_entry(disk, cluster_to_use);
-        if (entry == 0xFF8 || entry == 0xFFF)
+        if (entry == 0xFFF8 || entry == 0xFFFF)
         {
             // We are the last entry in the file
             res = -EIO;
@@ -711,7 +711,7 @@ int fat16_read(struct disk *disk, void *descriptor, uint32_t size, uint32_t nmem
         out_ptr += size;
         offset += size;
     }
-
+    fat_desc->pos = offset;
     res = nmemb;
 
 out:
