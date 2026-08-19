@@ -33,3 +33,6 @@
 *.bak
 
 .vscode
+
+module1
+module2
