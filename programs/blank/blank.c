@@ -5,12 +5,8 @@
 
 int main(int argc, char **argv)
 {
-    char *ptr = yreserve(20);
-    strcpy(ptr, "hello world");
-    print(ptr);
-    yfree(ptr);
-    ptr[0] = 'B';
-    print("abc\n");
+    print(argv[0]);
+    print("did this work?\n");
     while (1)
     {
     };

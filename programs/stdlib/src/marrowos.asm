@@ -7,6 +7,7 @@ global marrowos_malloc:function
 global marrowos_free:function
 global marrowos_putchar:function
 global marrowos_process_load_start:function
+global marrowos_process_get_arguments:function
 
 ; void print(const char* message)
 print:
@@ -68,6 +69,17 @@ marrowos_process_load_start:
     mov ebp,esp
     mov eax,6 ; Command 6 - process load start ( starts a process)
     push dword[ebp+8]; Variable "filename"
+    int 0x80
+    add esp,4
+    pop ebp
+    ret
+
+; void marrowos_process_get_arguments(struct process_arguments* arguments)
+marrowos_process_get_arguments:
+    push ebp
+    mov ebp, esp
+    mov eax,8; Command 8 Gets the process arguments
+    push dword[ebp+8]; Variable arguments
     int 0x80
     add esp,4
     pop ebp
