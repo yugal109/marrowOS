@@ -11,7 +11,8 @@ int main(int argc, char **argv)
         print("> ");
         char buf[1024];
         marrowos_terminal_readline(buf, sizeof(buf), true);
-        marrowos_process_load_start(buf);
+        print("\n");
+        marrowos_system_run(buf);
         print("\n");
     }
     return 0;
