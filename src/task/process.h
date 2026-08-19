@@ -10,6 +10,13 @@
 #define PROCESS_FILE_TYPE_BINARY 1
 
 typedef unsigned char PROCESS_FILE_TYPE;
+
+struct process_allocation
+{
+    void *ptr;
+    size_t size;
+};
+
 struct process
 {
 
@@ -22,7 +29,7 @@ struct process
     struct task *task;
 
     // The memory (malloc) allocations of the process
-    void *allocations[MARROWOS_MAX_PROGRAM_ALLOCATION];
+    struct process_allocation allocations[MARROWOS_MAX_PROGRAM_ALLOCATION];
 
     PROCESS_FILE_TYPE filetype;
     union

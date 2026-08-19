@@ -46,7 +46,7 @@ static int process_find_free_allocation_index(struct process *process)
     int res = -ENOMEM;
     for (int i = 0; i < MARROWOS_MAX_PROGRAM_ALLOCATION; i++)
     {
-        if (process->allocations[i] == 0)
+        if (process->allocations[i].ptr == 0)
         {
             res = i;
             break;
@@ -78,7 +78,8 @@ void *process_malloc(struct process *process, size_t size)
     {
         goto out_err;
     }
-    process->allocations[index] = ptr;
+    process->allocations[index].ptr = ptr;
+    process->allocations[index].size = size;
     return ptr;
 
 out_err:
@@ -89,37 +90,52 @@ out_err:
     return 0;
 }
 
-static bool process_is_process_pointer(struct process *process, void *ptr)
-{
-    for (int i = 0; i < MARROWOS_MAX_PROGRAM_ALLOCATION; i++)
-    {
-        if (process->allocations[i] == ptr)
-        {
-            return true;
-        }
-    }
-    return false;
-}
-
 static void process_allocation_unjoin(struct process *process, void *ptr)
 {
 
     for (int i = 0; i < MARROWOS_MAX_PROGRAM_ALLOCATION; i++)
     {
-        if (process->allocations[i] == ptr)
+        if (process->allocations[i].ptr == ptr)
         {
-            process->allocations[i] = 0x00;
+            process->allocations[i].ptr = 0x00;
+            process->allocations[i].size = 0;
         }
     }
 }
 
+static struct process_allocation *process_get_allocation_by_addr(struct process *process, void *addr)
+{
+    for (int i = 0; i < MARROWOS_MAX_PROGRAM_ALLOCATION; i++)
+    {
+        if (process->allocations[i].ptr == addr)
+        {
+            return &process->allocations[i];
+        }
+    }
+    return 0;
+}
+
 void process_free(struct process *process, void *ptr)
 {
-    // Not this process pointer ? then we can't free it.
-    if (!process_is_process_pointer(process, ptr))
+    // unlink the pages from the process for the given address
+    struct process_allocation *allocation = process_get_allocation_by_addr(process, ptr);
+    if (!allocation)
+    {
+
+        // Oops it's not our pointer.
+        return;
+    }
+
+    int res = paging_map_to(process->task->page_directory,
+                            allocation->ptr,
+                            allocation->ptr,
+                            paging_align_address(allocation->ptr + allocation->size),
+                            0x00);
+    if (res < 0)
     {
         return;
     }
+
     // unjoin the  allocation
     process_allocation_unjoin(process, ptr);
 
