@@ -172,9 +172,23 @@ out:
     return res;
 }
 
+void elf_file_free(struct elf_file *elf_file)
+{
+    if (elf_file->elf_memory)
+    {
+        kfree(elf_file->elf_memory);
+    }
+    kfree(elf_file);
+}
+
+struct elf_file *elf_file_new()
+{
+    return (struct elf_file *)kzalloc(sizeof(struct elf_file));
+}
+
 int elf_load(const char *filename, struct elf_file **file_out)
 {
-    struct elf_file *elf_file = kzalloc(sizeof(struct elf_file));
+    struct elf_file *elf_file = elf_file_new();
     int fd = 0;
     int res = 0;
     if (!elf_file)
@@ -222,6 +236,7 @@ out:
     fclose(fd);
     if (res < 0)
     {
+        elf_file_free(elf_file);
         elf_close(elf_file);
     }
     return res;
