@@ -13,8 +13,5 @@ int main(int argc, char **argv)
     char *ptr = (char *)0x00;
     *ptr = 0x50;
 
-    while (1)
-    {
-    };
     return 0;
 }

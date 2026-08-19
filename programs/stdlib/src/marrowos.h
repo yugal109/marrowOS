@@ -27,5 +27,6 @@ struct command_argument *marrowos_parse_command(const char *command, int max);
 void marrowos_process_get_arguments(struct process_arguments *arguments);
 int marrowos_system(struct command_argument *arguments);
 int marrowos_system_run(const char *command);
+void marrowos_exit();
 
 #endif

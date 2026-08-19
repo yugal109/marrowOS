@@ -9,6 +9,7 @@ global marrowos_putchar:function
 global marrowos_process_load_start:function
 global marrowos_process_get_arguments:function
 global marrowos_system: function
+global marrowos_exit: function
 
 ; void print(const char* message)
 print:
@@ -94,5 +95,14 @@ marrowos_process_get_arguments:
     push dword[ebp+8]; Variable arguments
     int 0x80
     add esp,4
+    pop ebp
+    ret
+
+; void marrowos_exit()
+marrowos_exit:
+    push ebp
+    mov ebp,esp
+    mov eax,9; Command 9 process exit
+    int 0x80
     pop ebp
     ret
