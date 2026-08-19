@@ -78,5 +78,6 @@ void *process_malloc(struct process *process, size_t size);
 void process_free(struct process *process, void *ptr);
 int process_inject_arguments(struct process *process, struct command_argument *root_argument);
 void process_get_arguments(struct process *process, int *argc, char ***argv);
+int process_terminate(struct process *process);
 
 #endif
