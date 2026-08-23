@@ -3,8 +3,8 @@
 #include <stdint.h>
 // #include "idt/idt.h"
 // #include "io/io.h"
-// #include "memory/memory.h"
-// #include "memory/heap/kheap.h"
+#include "memory/memory.h"
+#include "memory/heap/kheap.h"
 // #include "memory/paging/paging.h"
 // #include "disk/disk.h"
 // #include "fs/pparser.h"
@@ -156,8 +156,14 @@ void kernel_main()
     // // Load the gdt
     // gdt_load(gdt_real, sizeof(gdt_real) - 1);
 
-    // // Initialize the heap
-    // kheap_init();
+    // Initialize the heap
+    kheap_init();
+    char *data = kmalloc(50);
+    data[0] = 'A';
+    data[1] = 'B';
+    data[2] = 'C';
+    data[3] = 0x00;
+    print(data);
 
     // // Initialize the file systems
     // fs_init();
