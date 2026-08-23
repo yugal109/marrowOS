@@ -157,13 +157,13 @@ void kernel_main()
     // gdt_load(gdt_real, sizeof(gdt_real) - 1);
 
     // Initialize the heap
-    kheap_init();
-    char *data = kmalloc(50);
-    data[0] = 'A';
-    data[1] = 'B';
-    data[2] = 'C';
-    data[3] = 0x00;
-    print(data);
+    // kheap_init();
+    // char *data = kmalloc(50);
+    // data[0] = 'A';
+    // data[1] = 'B';
+    // data[2] = 'C';
+    // data[3] = 0x00;
+    // print(data);
 
     // // Initialize the file systems
     // fs_init();
