@@ -124,7 +124,8 @@ PDPT_TABLE:
 
 align 4096
 PD_Table:
-    ; Map the first 4 MB of memory using two 2 MB pages
-    dq (0x0000000000200083)     ; PD Entry for 0x00200000 - 0x00400000
-    dq (0x0000000000400083)     ; PD Entry for 0x00400000 - 0x00600000
+    ; Identity-map 0-6MB as 2MB pages (VGA 0xB8000 + kernel 1MB + stack 2MB + C)
+    dq (0x0000000000000083)     ; 0    - 2MB
+    dq (0x0000000000200083)     ; 2MB  - 4MB
+    dq (0x0000000000400083)     ; 4MB  - 6MB
     times 509 dq 0  
