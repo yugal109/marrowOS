@@ -1,10 +1,11 @@
 # FILES = ./build/kernel.asm.o ./build/kernel.o ./build/disk/disk.o ./build/idt/idt.asm.o ./build/memory/memory.o ./build/idt/idt.o ./build/keyboard/keyboard.o ./build/keyboard/classic.o ./build/isr80h/isr80h.o ./build/isr80h/process.o ./build/isr80h/heap.o ./build/isr80h/misc.o ./build/isr80h/io.o ./build/task/task.o ./build/task/task.asm.o ./build/task/process.o ./build/loader/formats/elf.o ./build/loader/formats/elfloader.o ./build/io/io.asm.o ./build/gdt/gdt.asm.o ./build/gdt/gdt.o ./build/task/tss.asm.o ./build/memory/heap/heap.o ./build/memory/heap/kheap.o ./build/fs/pparser.o ./build/fs/file.o ./build/fs/fat/fat16.o ./build/string/string.o ./build/disk/streamer.o ./build/memory/paging/paging.o ./build/memory/paging/paging.asm.o
 #FILES = ./build/kernel.asm.o ./build/kernel.o ./build/loader/formats/elf.o ./build/loader/formats/elfloader.o  ./build/isr80h/isr80h.o ./build/isr80h/process.o ./build/isr80h/heap.o ./build/keyboard/keyboard.o ./build/keyboard/classic.o ./build/isr80h/io.o ./build/isr80h/misc.o ./build/disk/disk.o ./build/disk/streamer.o ./build/task/process.o ./build/task/task.o ./build/task/task.asm.o ./build/task/tss.asm.o ./build/fs/pparser.o ./build/fs/file.o ./build/fs/fat/fat16.o ./build/string/string.o ./build/idt/idt.asm.o ./build/idt/idt.o ./build/memory/memory.o ./build/io/io.asm.o ./build/gdt/gdt.o ./build/gdt/gdt.asm.o ./build/memory/heap/heap.o ./build/memory/heap/kheap.o ./build/memory/paging/paging.o ./build/memory/paging/paging.asm.o
 FILES = ./build/kernel.asm.o ./build/kernel.o ./build/string/string.o ./build/memory/paging/paging.o ./build/memory/paging/paging.asm.o ./build/memory/heap/heap.o ./build/memory/heap/kheap.o ./build/memory/memory.o
+$(FILES): | directories
 INCLUDES = -I./src
 FLAGS = -g -ffreestanding -falign-jumps -falign-functions -falign-labels -falign-loops -fstrength-reduce -fomit-frame-pointer -finline-functions -Wno-unused-function -fno-builtin -Werror -Wno-unused-label -Wno-cpp -Wno-unused-parameter -nostdlib -nostartfiles -nodefaultlibs -Wall -O0 -Iinc
 
-all: ./bin/boot.bin ./bin/kernel.bin
+all: directories ./bin/boot.bin ./bin/kernel.bin
 	rm -rf ./bin/os.bin
 	dd if=./bin/boot.bin >> ./bin/os.bin
 	dd if=./bin/kernel.bin >> ./bin/os.bin
@@ -12,12 +13,15 @@ all: ./bin/boot.bin ./bin/kernel.bin
 	# Initialize FAT16 (keep our boot sector). No user ELFs in lecture 7.
 	MTOOLS_SKIP_CHECK=1 mformat -i ./bin/os.bin -B ./bin/boot.bin -R 200 -c 128 -r 64 ::
 
+directories:
+	mkdir -p ./bin ./build/string ./build/memory/heap ./build/memory/paging
 
-./bin/kernel.bin: $(FILES)
+
+./bin/kernel.bin: directories $(FILES)
 	x86_64-elf-ld -g -relocatable $(FILES) -o ./build/kernelfull.o
 	x86_64-elf-gcc $(FLAGS) -T ./src/linker.ld -o ./bin/kernel.bin -ffreestanding -O0 -nostdlib ./build/kernelfull.o
 
-./bin/boot.bin: ./src/boot/boot.asm
+./bin/boot.bin: directories ./src/boot/boot.asm
 	nasm -f bin ./src/boot/boot.asm -o ./bin/boot.bin
 
 ./build/kernel.asm.o: ./src/kernel.asm
@@ -129,10 +133,7 @@ user_programs_clean:
 	cd ./programs/blank && $(MAKE) clean
 	cd ./programs/shell && $(MAKE) clean
 
-clean: user_programs_clean
-	rm -rf ./bin/boot.bin
-	rm -rf ./bin/kernel.bin
-	rm -rf ./bin/os.bin
-	rm -rf ${FILES}
+clean: 
+	rm -rf ./bin/boot.bin ./bin/kernel.bin ./bin/os.bin
 	rm -rf ./build/kernelfull.o
-	find ./build -type f -name '*.o' -delete
+	find ./build -type f -delete
