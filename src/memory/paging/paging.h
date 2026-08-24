@@ -49,7 +49,7 @@ struct paging_desc_entry
     uint64_t ignored : 1;         // Bit 6: Ignored
     uint64_t reserved0 : 1;       // Bit 7: Must be 0 in PML4E
     uint64_t reserved1 : 4;       // Bit 8:11: Reserved must be 0
-    uint64_t address : 40;        // Bits 12-51: PDPT Baase address
+    uint64_t address : 40;        // Bits 12-51: PDPT Base address
     uint64_t available : 11;      // Bits 52-62: Available to software
     uint64_t execute_disable : 1; // Bit 63: XD
 } __attribute__((packed));
