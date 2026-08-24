@@ -5,7 +5,7 @@
 // #include "io/io.h"
 #include "memory/memory.h"
 #include "memory/heap/kheap.h"
-// #include "memory/paging/paging.h"
+#include "memory/paging/paging.h"
 // #include "disk/disk.h"
 // #include "fs/pparser.h"
 #include "string/string.h"
@@ -145,6 +145,7 @@ void print(const char *str)
 
 // };
 
+struct paging_desc *kernel_paging_desc = 0;
 void kernel_main()
 {
     terminal_initialize();
@@ -157,13 +158,17 @@ void kernel_main()
     // gdt_load(gdt_real, sizeof(gdt_real) - 1);
 
     // Initialize the heap
-    // kheap_init();
-    // char *data = kmalloc(50);
-    // data[0] = 'A';
-    // data[1] = 'B';
-    // data[2] = 'C';
-    // data[3] = 0x00;
-    // print(data);
+    kheap_init();
+    char *data = kmalloc(50);
+    data[0] = 'A';
+    data[1] = 'B';
+    data[2] = 'C';
+    data[3] = 0x00;
+    print(data);
+
+    kernel_paging_desc = paging_desc_new(PAGING_MAP_LEVEL_4);
+
+    // map the first 419MB to the first 419MB of memory
 
     // // Initialize the file systems
     // fs_init();

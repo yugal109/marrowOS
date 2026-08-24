@@ -51,7 +51,7 @@ struct paging_desc_entry
     uint64_t reserved1 : 4;       // Bit 8:11: Reserved must be 0
     uint64_t address : 40;        // Bits 12-51: PDPT Baase address
     uint64_t available : 11;      // Bits 52-62: Available to software
-    uint64_t execute_disable : 1  // Bit 63: XD
+    uint64_t execute_disable : 1; // Bit 63: XD
 } __attribute__((packed));
 
 struct paging_pml_entries
@@ -67,6 +67,17 @@ struct paging_desc
     // Indicates weather the pml is level 4 or 5 or a future level
     paging_map_level_t level;
 } __attribute__((packed));
+
+int paging_map_to(struct paging_desc *desc, void *virt, void *phys, void *phys_end, int flags);
+int paging_map_range(struct paging_desc *desc, void *virt, void *phys, size_t count, int flags);
+int paging_map(struct paging_desc *desc, void *virt, void *phys, int flags);
+void *paging_align_to_lower_page(void *addr);
+void *paging_align_address(void *ptr);
+struct paging_desc *paging_desc_new(paging_map_level_t root_map_level);
+
+void paging_load_directory(uintptr_t *directory);
+void paging_invalidate_tlb_entry(void *addr);
+void paging_switch(struct paging_desc *desc);
 
 // OLD CODE BELOW
 //==========================================================
