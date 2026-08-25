@@ -1,4 +1,67 @@
 #include "memory.h"
+#include "config.h"
+
+size_t e820_total_entries()
+{
+    return *((uint16_t *)MARROWOS_MEMORY_MAP_TOTAL_ENTRIES_LOCATION);
+}
+
+struct e820_entry *e820_entry(size_t index)
+{
+    if (index >= e820_total_entries())
+    {
+        return NULL;
+    }
+
+    struct e820_entry *entries = (struct e820_entry *)MARROWOS_MEMORY_MAP_LOCATION;
+    return &entries[index];
+}
+
+struct e820_entry *e820_largest_free_entry()
+{
+    size_t total_memory_entries = e820_total_entries();
+    struct e820_entry *entires = (struct e820_entry *)MARROWOS_MEMORY_MAP_LOCATION;
+
+    // all we want is , long contiguous memory regions
+    struct e820_entry *chosen_entry = NULL;
+
+    for (int i = 0; i < total_memory_entries; i++)
+    {
+        struct e820_entry *entry = &entires[i];
+        if (entry->type == 1)
+        {
+            // usable memory
+            if (chosen_entry == NULL)
+            {
+                chosen_entry = entry;
+                continue;
+            }
+            if (entry->length > chosen_entry->length)
+            {
+                chosen_entry = entry;
+            }
+        }
+    }
+
+    return chosen_entry;
+}
+
+size_t e820_total_accessible_memory()
+{
+    size_t total_memory_entries = e820_total_entries();
+    struct e820_entry *entries = (struct e820_entry *)MARROWOS_MEMORY_MAP_LOCATION;
+    size_t total_memory = 0;
+    for (int i = 0; i < total_memory_entries; i++)
+    {
+        struct e820_entry *entry = &entries[i];
+        if (entry->type == 1)
+        {
+            // usable memory
+            total_memory += entry->length;
+        }
+    }
+    return total_memory;
+}
 
 void *memset(void *ptr, int c, size_t size)
 {

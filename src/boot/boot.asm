@@ -110,7 +110,15 @@ step2:
     mov ss, ax
     mov gs,ax
     mov fs,ax
+
+    ; enable a20 line
+    in al,0x92
+    or al,2
+    out 0x92,al
+
     mov sp, 0x7c00
+
+    call load_memory_map
     sti ; Enables Interrupts
 
 .load_protected:
@@ -152,7 +160,40 @@ gdt_end:
 gdt_descriptor:
     dw gdt_end - gdt_start-1
     dd gdt_start
- 
+
+load_memory_map:
+    mov word[total_memory_map_entries],0
+    mov di,0x7e00 ; Es:DI Pointer to E820 buffer, where we load our E820 records, 0x7e00 is right after boot sector ends in ram
+    mov cx, 24 ; Each E820 entry is at least 24 bytes
+    xor bx,bx
+
+    ; Set the EAX,EDX ready for E820 call
+    ; o32 means = I'm in 16-bit mode, but use the full 32-bit EAX register for this one instruction
+    o32 mov eax,0xE820 ; EAX = 0xE820
+    o32 mov edx, 0x534D4150 ; EDS='SMAP', SMAP -> is (53 4D 41 50) in ASCII
+
+.get_e820_entry:
+    int 0x15 ; Call BIOS function E820
+    jc .done ; if CF is set then theirs no more entries or an error
+
+    o32 cmp eax,0x534D4150 ; Is it SMAP
+    jne .done
+
+    inc word [total_memory_map_entries]
+
+    o32 mov eax,0xE820
+    mov cx,24
+
+
+    add di,cx
+
+    test bx,bx
+    jnz .get_e820_entry
+
+.done:
+    ; completed
+    ret
+
 [BITS 32]
 load32:
     mov ax,DATA_SEG
@@ -240,4 +281,5 @@ ata_lba_read:
 
 
 times 510-($ - $$) db 0
+total_memory_map_entries:
 dw 0xAA55

@@ -5,15 +5,25 @@
 #define KERNEL_CODE_SELECTOR 0x08
 #define KERNEL_DATA_SELECTOR 0x10
 
+// Where to find the E820 records
+#define MARROWOS_MEMORY_MAP_LOCATION 0x7e00
+
+// 16 Bit number defining the total number of loaded
+// entries.
+#define MARROWOS_MEMORY_MAP_TOTAL_ENTRIES_LOCATION 0x7DFE
+
 // 100MB heap size;
 #define MARROWOS_HEAP_SIZE_BYTES 104857600
 #define MARROWOS_HEAP_BLOCK_SIZE 4096
 
-// 0x01000000 = 16mb th location in RAM, refer osdev.org/Memory_Map
-#define MARROWOS_HEAP_ADDRESS 0x01000000
+// The minimal address the heap can point at, ensuring
+// that the kernel does not get overwritten
+#define MARROWOS_MINIMAL_HEAP_ADDRESS 0x01100000 // location - 17mb
 
-// refer osdev.org to where this address came from ?
-#define MARROWOS_HEAP_TABLE_ADDRESS 0x00007E00
+// This is a minimal heap table starting address
+#define MARROWOS_MINIMAL_HEAP_TABLE_ADDRESS 0x01000000 // table location - 16mb
+
+#define MARROWOS_MINIMAL_HEAP_TABLE_SIZE MARROWOS_MINIMAL_HEAP_ADDRESS - MARROWOS_MINIMAL_HEAP_TABLE_ADDRESS // table size is (1mb)
 
 // sector size in normal hard disk
 #define MARROWOS_SECTOR_SIZE 512

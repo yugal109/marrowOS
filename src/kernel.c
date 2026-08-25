@@ -167,6 +167,10 @@ void kernel_main()
     terminal_initialize();
     print("Hello 64-bit!\n");
 
+    print("Total memory\n");
+    print(itoa(e820_total_accessible_memory()));
+    print("\n");
+
     // memset(gdt_real, 0x00, sizeof(gdt_real));
     // gdt_structured_to_gdt(gdt_real, gdt_structured, MARROWOS_TOTAL_GDT_SEGMENTS);
 
@@ -183,37 +187,37 @@ void kernel_main()
     data[3] = 0x00;
     print(data);
 
-    kernel_paging_desc = paging_desc_new(PAGING_MAP_LEVEL_4);
+    // kernel_paging_desc = paging_desc_new(PAGING_MAP_LEVEL_4);
 
-    // map the first 419MB to the first 419MB of memory
-    paging_map_range(kernel_paging_desc,
-                     (void *)0x00000000,                    // virtual address
-                     (void *)0x00000000,                    // physical address
-                     1024 * 100,                            // total size
-                     PAGING_IS_WRITABLE | PAGING_IS_PRESENT // flags
-    );
+    // // map the first 419MB to the first 419MB of memory
+    // paging_map_range(kernel_paging_desc,
+    //                  (void *)0x00000000,                    // virtual address
+    //                  (void *)0x00000000,                    // physical address
+    //                  1024 * 100,                            // total size
+    //                  PAGING_IS_WRITABLE | PAGING_IS_PRESENT // flags
+    // );
 
-    paging_switch(kernel_paging_desc);
-    data[0] = 'M';
-    print(data);
+    // paging_switch(kernel_paging_desc);
+    // data[0] = 'M';
+    // print(data);
 
-    struct heap *kernel_heap = kheap_get();
-    size_t total = heap_total_size(kernel_heap);
-    size_t used = heap_total_used(kernel_heap);
-    size_t avail = heap_total_available(kernel_heap);
+    // struct heap *kernel_heap = kheap_get();
+    // size_t total = heap_total_size(kernel_heap);
+    // size_t used = heap_total_used(kernel_heap);
+    // size_t avail = heap_total_available(kernel_heap);
 
-    print("\n");
-    print("Total heap size: ");
-    print(itoa(total));
-    print("\n");
+    // print("\n");
+    // print("Total heap size: ");
+    // print(itoa(total));
+    // print("\n");
 
-    print("Total heap used: ");
-    print(itoa(used));
-    print("\n");
+    // print("Total heap used: ");
+    // print(itoa(used));
+    // print("\n");
 
-    print("Total heap available: ");
-    print(itoa(avail));
-    print("\n");
+    // print("Total heap available: ");
+    // print(itoa(avail));
+    // print("\n");
 
     // // Initialize the file systems
     // fs_init();
