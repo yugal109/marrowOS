@@ -3,6 +3,7 @@
 section .asm
 
 global _start
+global kernel_registers
 extern kernel_main
 
 ; Segment Selectors
@@ -50,6 +51,14 @@ _start:
     jmp LONG_MODE_CODE_SEG:long_mode_entry
 
 [BITS 64]
+kernel_registers:
+    mov ax,LONG_MODE_DATA_SEG
+    mov ds,ax
+    mov es,ax
+    mov gs,ax
+    mov fs,ax
+    ret
+    
 long_mode_entry:
     mov ax, LONG_MODE_DATA_SEG
     mov ds, ax

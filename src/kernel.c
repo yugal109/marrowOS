@@ -100,6 +100,14 @@ void print(const char *str)
     }
 }
 
+void panic(const char *msg)
+{
+    print(msg);
+    while (1)
+    {
+    }
+}
+
 // extern void problem();
 
 // static struct paging_4gb_chunk *kernel_chunk = 0;
@@ -138,7 +146,7 @@ void print(const char *str)
 //         .base = 0x00,
 //         .limit = 0xffffffff,
 //         .type = 0xF2}, // User Data Segment
-//     {
+//     {paging_switch
 //         .base = (uint32_t)&tss,
 //         .limit = sizeof(tss),
 //         .type = 0xE9}, // TSS Segment
@@ -146,6 +154,13 @@ void print(const char *str)
 // };
 
 struct paging_desc *kernel_paging_desc = 0;
+
+void kernel_page()
+{
+    kernel_registers();
+    paging_switch(kernel_paging_desc);
+}
+
 void kernel_main()
 {
     terminal_initialize();
