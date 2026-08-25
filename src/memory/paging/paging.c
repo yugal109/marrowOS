@@ -39,7 +39,7 @@ void *paging_align_to_lower_page(void *addr)
 void paging_switch(struct paging_desc *desc)
 {
     current_paging_desc = desc;
-    paging_load_directory((uint64_t*)(&desc->pml->entries[0]));
+    paging_load_directory((uint64_t *)(&desc->pml->entries[0]));
 }
 
 struct paging_desc *paging_desc_new(paging_map_level_t root_map_level)
@@ -62,7 +62,7 @@ struct paging_desc *paging_desc_new(paging_map_level_t root_map_level)
     return desc;
 }
 
-static bool paging_is_aligned(void *addr)
+bool paging_is_aligned(void *addr)
 {
     return ((uintptr_t)addr % PAGING_PAGE_SIZE) == 0;
 }

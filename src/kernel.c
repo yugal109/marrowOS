@@ -4,6 +4,7 @@
 // #include "idt/idt.h"
 // #include "io/io.h"
 #include "memory/memory.h"
+#include "memory/heap/heap.h"
 #include "memory/heap/kheap.h"
 #include "memory/paging/paging.h"
 // #include "disk/disk.h"
@@ -173,7 +174,8 @@ void kernel_main()
     // gdt_load(gdt_real, sizeof(gdt_real) - 1);
 
     // Initialize the heap
-    kheap_init();
+    kheap_init(MARROWOS_HEAP_SIZE_BYTES);
+
     char *data = kmalloc(50);
     data[0] = 'A';
     data[1] = 'B';
@@ -184,6 +186,34 @@ void kernel_main()
     kernel_paging_desc = paging_desc_new(PAGING_MAP_LEVEL_4);
 
     // map the first 419MB to the first 419MB of memory
+    paging_map_range(kernel_paging_desc,
+                     (void *)0x00000000,                    // virtual address
+                     (void *)0x00000000,                    // physical address
+                     1024 * 100,                            // total size
+                     PAGING_IS_WRITABLE | PAGING_IS_PRESENT // flags
+    );
+
+    paging_switch(kernel_paging_desc);
+    data[0] = 'M';
+    print(data);
+
+    struct heap *kernel_heap = kheap_get();
+    size_t total = heap_total_size(kernel_heap);
+    size_t used = heap_total_used(kernel_heap);
+    size_t avail = heap_total_available(kernel_heap);
+
+    print("\n");
+    print("Total heap size: ");
+    print(itoa(total));
+    print("\n");
+
+    print("Total heap used: ");
+    print(itoa(used));
+    print("\n");
+
+    print("Total heap available: ");
+    print(itoa(avail));
+    print("\n");
 
     // // Initialize the file systems
     // fs_init();
