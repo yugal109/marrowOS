@@ -187,14 +187,15 @@ void kernel_main()
     data[3] = 0x00;
     print(data);
 
-    // kernel_paging_desc = paging_desc_new(PAGING_MAP_LEVEL_4);
+    kernel_paging_desc = paging_desc_new(PAGING_MAP_LEVEL_4);
+    paging_map_e820_memory_regions(kernel_paging_desc);
 
     // // map the first 419MB to the first 419MB of memory
     // paging_map_range(kernel_paging_desc,
-    //                  (void *)0x00000000,                    // virtual address
-    //                  (void *)0x00000000,                    // physical address
-    //                  1024 * 100,                            // total size
-    //                  PAGING_IS_WRITABLE | PAGING_IS_PRESENT // flags
+    //                  (void *)0x00000000,                     // virtual address
+    //                  (void *)0x00000000,                     // physical address
+    //                  1024 * 100,                             // total size
+    //                  PAGING_IS_WRITEABLE | PAGING_IS_PRESENT // flags
     // );
 
     // paging_switch(kernel_paging_desc);
@@ -237,7 +238,7 @@ void kernel_main()
     // tss_load(0x28);
 
     // // Setup paging
-    // kernel_chunk = paging_new_4gb(PAGING_IS_WRITABLE | PAGING_IS_PRESENT | PAGING_ACCESS_FROM_ALL);
+    // kernel_chunk = paging_new_4gb(PAGING_IS_WRITEABLE | PAGING_IS_PRESENT | PAGING_ACCESS_FROM_ALL);
 
     // // switch to kernel paging chunk
     // paging_switch(kernel_chunk);

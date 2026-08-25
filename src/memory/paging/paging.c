@@ -1,6 +1,7 @@
 #include "paging.h"
 #include "memory/heap/kheap.h"
 #include "memory/memory.h"
+#include "memory/heap/heap.h"
 #include "status.h"
 
 // it’s the kernel’s “which map is live right now” pointer
@@ -135,8 +136,40 @@ int paging_map(struct paging_desc *desc, void *virt, void *phys, int flags)
     }
     pt_entry->address = ((uintptr_t)phys) >> 12;
     pt_entry->present = (flags & PAGING_IS_PRESENT) ? 1 : 0;
-    pt_entry->read_write = (flags & PAGING_IS_WRITABLE) ? 1 : 0;
+    pt_entry->read_write = (flags & PAGING_IS_WRITEABLE) ? 1 : 0;
     return res;
+}
+
+int paging_map_e820_memory_regions(struct paging_desc *desc)
+{
+    size_t total_entries = e820_total_entries();
+    for (int i = 0; i < total_entries; i++)
+    {
+        struct e820_entry *entry = e820_entry(i);
+        if (entry->type == 1)
+        {
+            void *base_addr = (void *)entry->base_addr;
+            void *end_addr = (void *)(entry->base_addr + entry->length);
+
+            // Why up? Because you don't want to map below the start of the region.
+            // That could overlap reserved memory before it.
+            if (!paging_is_aligned(base_addr))
+            {
+                // we need to round up,
+                base_addr = paging_align_address(base_addr);
+            }
+
+            // Why down? Because you don't want to map past the end of the region.
+            // That could overlap reserved memory after it.
+            if (!paging_is_aligned(end_addr))
+            {
+                end_addr = paging_align_to_lower_page(end_addr);
+            }
+
+            paging_map_to(desc, base_addr, base_addr, end_addr, PAGING_IS_WRITEABLE | PAGING_IS_PRESENT);
+        }
+    }
+    return 0;
 }
 
 int paging_map_range(struct paging_desc *desc, void *virt, void *phys, size_t count, int flags)
@@ -216,7 +249,7 @@ out:
 //             entry[b] = (offset + (b * PAGING_PAGE_SIZE)) | flags;
 //         }
 //         offset += (PAGING_TOTAL_ENTRIES_PER_TABLE * PAGING_PAGE_SIZE);
-//         directory[i] = (uint32_t)entry | flags | PAGING_IS_WRITABLE;
+//         directory[i] = (uint32_t)entry | flags | PAGING_IS_WRITEABLE;
 //     }
 
 //     struct paging_4gb_chunk *chunk_4gb = kzalloc(sizeof(struct paging_4gb_chunk));

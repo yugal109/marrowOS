@@ -15,7 +15,7 @@ typedef uint8_t paging_map_level_t;
 #define PAGING_CACHE_DISABLED 0b00010000
 #define PAGING_WRITE_THROUGH 0b00001000
 #define PAGING_ACCESS_FROM_ALL 0b00000100
-#define PAGING_IS_WRITABLE 0b00000010
+#define PAGING_IS_WRITEABLE 0b00000010
 #define PAGING_IS_PRESENT 0b00000001
 
 #define PAGING_TOTAL_ENTRIES_PER_TABLE 512
@@ -79,6 +79,7 @@ struct paging_desc *paging_desc_new(paging_map_level_t root_map_level);
 void paging_load_directory(uintptr_t *directory);
 void paging_invalidate_tlb_entry(void *addr);
 void paging_switch(struct paging_desc *desc);
+int paging_map_e820_memory_regions(struct paging_desc *desc);
 
 // OLD CODE BELOW
 //==========================================================
