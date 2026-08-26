@@ -51,5 +51,6 @@ uintptr_t heap_align_value_to_upper(uintptr_t val);
 uintptr_t heap_align_value_to_lower(uintptr_t val);
 bool heap_is_address_within_heap(struct heap *heap, void *ptr);
 void heap_callbacks_set(struct heap *heap, HEAP_BLOCK_ALLOCATED_CALLBACK_FUNCTION allocated_func, HEAP_BLOCK_FREE_CALLBACK_FUNCTION free_func);
+size_t heap_allocation_block_count(struct heap *heap, void *starting_address);
 
 #endif
