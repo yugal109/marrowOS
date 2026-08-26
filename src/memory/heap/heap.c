@@ -52,7 +52,7 @@ out:
     return res;
 }
 
-static uintptr_t heap_align_value_to_upper(uintptr_t val)
+uintptr_t heap_align_value_to_upper(uintptr_t val)
 {
     if ((val % MARROWOS_HEAP_BLOCK_SIZE) == 0)
     {
@@ -61,6 +61,18 @@ static uintptr_t heap_align_value_to_upper(uintptr_t val)
     val = (val - (val % MARROWOS_HEAP_BLOCK_SIZE));
     val += MARROWOS_HEAP_BLOCK_SIZE;
 
+    return val;
+}
+
+uintptr_t heap_align_value_to_lower(uintptr_t val)
+{
+    if ((val % MARROWOS_HEAP_BLOCK_SIZE) == 0)
+    {
+        return val;
+    }
+
+    // subtract the remainder
+    val = val - (val % MARROWOS_HEAP_BLOCK_SIZE);
     return val;
 }
 
@@ -189,7 +201,7 @@ size_t heap_total_used(struct heap *heap)
     struct heap_table *table = heap->table;
     for (size_t i = 0; i < table->total; i++)
     {
-        if (heap_get_entry_type(table->entries[i] == HEAP_BLOCK_TABLE_ENTRY_TAKEN))
+        if (heap_get_entry_type(table->entries[i]) == HEAP_BLOCK_TABLE_ENTRY_TAKEN)
         {
             total += MARROWOS_HEAP_BLOCK_SIZE;
         }

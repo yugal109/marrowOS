@@ -13,7 +13,7 @@
 #define MARROWOS_MEMORY_MAP_TOTAL_ENTRIES_LOCATION 0x7DFE
 
 // 100MB heap size;
-#define MARROWOS_HEAP_SIZE_BYTES 104857600
+#define MARROWOS_HEAP_MINIMUM_SIZE_BYTES 104857600
 #define MARROWOS_HEAP_BLOCK_SIZE 4096
 
 // The minimal address the heap can point at, ensuring

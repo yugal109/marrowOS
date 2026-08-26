@@ -10,6 +10,5 @@ void kfree(void *ptr);
 struct heap *kheap_get();
 void *kpalloc(size_t size);
 void *kpzalloc(size_t size);
-2
 
 #endif

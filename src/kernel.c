@@ -178,7 +178,7 @@ void kernel_main()
     // gdt_load(gdt_real, sizeof(gdt_real) - 1);
 
     // Initialize the heap
-    kheap_init(MARROWOS_HEAP_SIZE_BYTES);
+    kheap_init(MARROWOS_HEAP_MINIMUM_SIZE_BYTES);
 
     char *data = kmalloc(50);
     data[0] = 'A';
@@ -208,6 +208,7 @@ void kernel_main()
         if (!kmalloc(4096))
             break;
     }
+    print("\n");
     print("Memory wasted\n");
     // data[0] = 'M';
     // print(data);
