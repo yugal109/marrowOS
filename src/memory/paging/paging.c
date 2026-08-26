@@ -19,6 +19,11 @@ static bool paging_map_level_is_valid(paging_map_level_t level)
     return level == PAGING_MAP_LEVEL_4;
 }
 
+struct paging_desc *paging_current_descriptor()
+{
+    return current_paging_desc;
+}
+
 // rounds the pointer up to the next 4kb page
 void *paging_align_address(void *ptr)
 {

@@ -80,6 +80,7 @@ void paging_load_directory(uintptr_t *directory);
 void paging_invalidate_tlb_entry(void *addr);
 void paging_switch(struct paging_desc *desc);
 int paging_map_e820_memory_regions(struct paging_desc *desc);
+struct paging_desc *paging_current_descriptor();
 
 // OLD CODE BELOW
 //==========================================================
