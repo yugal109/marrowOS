@@ -33,6 +33,10 @@ struct heap
     // end address of the heap data pool
     void *eaddr;
 
+    size_t total_blocks;
+    size_t free_blocks;
+    size_t used_blocks;
+
     // callback func when a block is allocated
     HEAP_BLOCK_ALLOCATED_CALLBACK_FUNCTION block_allocated_callback;
 
