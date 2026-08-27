@@ -45,5 +45,6 @@ struct multiheap_single_heap *multiheap_get_paging_heap_for_address(struct multi
 void multiheap_get_heap_and_paging_heap_for_address(struct multiheap *multiheap, void *ptr, struct multiheap_single_heap **heap_out, struct multiheap_single_heap **paging_heap_out, void **real_phys_addr);
 size_t multiheap_allocation_block_count(struct multiheap *multiheap, void *ptr);
 size_t multiheap_allocation_byte_count(struct multiheap *multiheap, void *ptr);
+void multiheap_free(struct multiheap *multiheap, void *ptr);
 
 #endif

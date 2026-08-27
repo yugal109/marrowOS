@@ -244,6 +244,48 @@ out:
     return res;
 }
 
+struct paging_desc_entry *paging_get(struct paging_desc *desc, void *virtual_address)
+{
+    uintptr_t va = (uintptr_t)virtual_address;
+
+    size_t pml4_index = (va >> 39) & 0x1FF;
+    size_t pdpt_index = (va >> 30) & 0x1FF;
+    size_t pd_index   = (va >> 21) & 0x1FF;
+    size_t pt_index   = (va >> 12) & 0x1FF;
+
+    struct paging_desc_entry *pml4_entry = &desc->pml->entries[pml4_index];
+    if (paging_null_entry(pml4_entry))
+        return NULL;
+
+    struct paging_desc_entry *pdpt_entries = (struct paging_desc_entry *)((uintptr_t)(pml4_entry->address) << 12);
+    struct paging_desc_entry *pdpt_entry = &pdpt_entries[pdpt_index];
+    if (paging_null_entry(pdpt_entry))
+        return NULL;
+
+    struct paging_desc_entry *pd_entries = (struct paging_desc_entry *)((uintptr_t)(pdpt_entry->address) << 12);
+    struct paging_desc_entry *pd_entry = &pd_entries[pd_index];
+    if (paging_null_entry(pd_entry))
+        return NULL;
+
+    struct paging_desc_entry *pt_entries = (struct paging_desc_entry *)((uintptr_t)(pd_entry->address) << 12);
+    return &pt_entries[pt_index];
+}
+
+void *paging_get_physical_address(struct paging_desc *desc, void *virtual_address)
+{
+    struct paging_desc_entry *desc_entry = paging_get(desc, virtual_address);
+    if (!desc_entry)
+    {
+        return NULL;
+    }
+
+    uint64_t physical_base = ((uint64_t)desc_entry->address) << 12;
+    uint64_t offset = ((uint64_t)virtual_address) & 0xFFF;
+
+    uint64_t full_address = physical_base + offset;
+    return (void *)full_address;
+}
+
 // OLD CODE BELOW
 //==========================================================
 

@@ -73,6 +73,7 @@ int paging_map_to(struct paging_desc *desc, void *virt, void *phys, void *phys_e
 int paging_map_range(struct paging_desc *desc, void *virt, void *phys, size_t count, int flags);
 int paging_map(struct paging_desc *desc, void *virt, void *phys, int flags);
 void *paging_align_to_lower_page(void *addr);
+void *paging_get_physical_address(struct paging_desc *desc, void *virtual_address);
 void *paging_align_address(void *ptr);
 struct paging_desc *paging_desc_new(paging_map_level_t root_map_level);
 
@@ -81,6 +82,7 @@ void paging_invalidate_tlb_entry(void *addr);
 void paging_switch(struct paging_desc *desc);
 int paging_map_e820_memory_regions(struct paging_desc *desc);
 struct paging_desc *paging_current_descriptor();
+struct paging_desc_entry *paging_get(struct paging_desc *desc, void *virtual_address);
 
 // OLD CODE BELOW
 //==========================================================
