@@ -1,52 +1,45 @@
+[BITS 64]
 section .asm
 
 global insb
 global insw
+global insdw
 global outb
 global outw
+global outdw
 
 insb:
-    push ebp
-    mov ebp,esp
-
-    xor eax,eax
-    mov edx, [ebp+8] ; put port in edx register
-
-    in al,dx
-
-    pop ebp
+    xor rax, rax
+    mov dx, di
+    in al, dx
     ret
 
 insw:
-    push ebp
-    mov ebp,esp
-
-    xor eax,eax
-    mov edx,[ebp+8]
-    in ax,dx
-
-
-    pop ebp
+    xor rax, rax
+    mov dx, di
+    in ax, dx
     ret
 
-outb:
-    push ebp
-    mov ebp,esp
+insdw: 
+    xor rax, rax
+    mov dx, di
+    in eax, dx
+    ret 
 
-    mov eax,[ebp+12]
-    mov edx,[ebp+8]
-    out dx,al
-    
-    pop ebp
+outb:
+    mov ax, si
+    mov dx, di
+    out dx, al
     ret
 
 outw:
-    push ebp
-    mov ebp,esp
+    mov rax, rsi
+    mov rdx, rdi
+    out dx, ax 
+    ret
 
-    mov eax,[ebp+12]
-    mov edx,[ebp+8]
-    out dx,ax
-    
-    pop ebp
+outdw:
+    mov rax, rsi
+    mov rdx, rdi
+    out dx, eax
     ret
