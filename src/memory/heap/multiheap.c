@@ -6,6 +6,8 @@
 #include <stdint.h>
 #include <stddef.h>
 
+// Allocate the multiheap descriptor from starting_heap. All later metadata
+// (nodes, other heap structs, paging-shadow tables) also comes from this pool.
 struct multiheap *multiheap_new(struct heap *starting_heap)
 {
     struct multiheap *multiheap = heap_zalloc(starting_heap, sizeof(struct multiheap));
@@ -20,6 +22,7 @@ out:
     return multiheap;
 }
 
+// Walk the chain and return the tail node (used when linking a new heap on).
 struct multiheap_single_heap *multiheap_get_last_heap(struct multiheap *multiheap)
 {
     struct multiheap_single_heap *current = multiheap->first_multiheap;
@@ -30,11 +33,14 @@ struct multiheap_single_heap *multiheap_get_last_heap(struct multiheap *multihea
     return current;
 }
 
+// True if this node is allowed to take part in kpalloc second-pass defrag.
 static bool multiheap_heap_allows_paging(struct multiheap_single_heap *heap)
 {
     return heap->flags & MULTIHEAP_HEAP_FLAG_DEFRAGMENT_WITH_PAGING;
 }
 
+// Highest physical eaddr across all heaps. That value becomes max_end_data_addr,
+// the split: below = real RAM, above = paging-shadow virtual space.
 void *multiheap_get_max_memory_end_address(struct multiheap *multiheap)
 {
     void *max_addr = 0x00;
@@ -50,6 +56,7 @@ void *multiheap_get_max_memory_end_address(struct multiheap *multiheap)
     return max_addr;
 }
 
+// Find the physical heap node whose [saddr, eaddr] contains this address.
 struct multiheap_single_heap *multiheap_get_heap_for_address(struct multiheap *multiheap, void *address)
 {
     struct multiheap_single_heap *current = multiheap->first_multiheap;
@@ -64,27 +71,34 @@ struct multiheap_single_heap *multiheap_get_heap_for_address(struct multiheap *m
     return NULL;
 }
 
+// One comparison: ptr >= max_end_data_addr means it came from kpalloc second pass.
 bool multiheap_is_address_virtual(struct multiheap *multiheap, void *ptr)
 {
     return ptr >= multiheap->max_end_data_addr;
 }
 
+// Has multiheap_ready() run? After that, the door is locked and shadows exist.
 bool multiheap_is_ready(struct multiheap *multiheap)
 {
     return multiheap->flags & MULTIHEAP_FLAG_IS_READY;
 }
 
+// New heaps can only be added before ready. Adding after would break the
+// physical/virtual split because max_end_data_addr is already frozen.
 bool multiheap_can_add_heap(struct multiheap *multiheap)
 {
     return !multiheap_is_ready(multiheap);
 }
 
+// Convert a paging-shadow virtual ptr back to the mirrored physical address
+// by subtracting max_end_data_addr. Used to find the twin physical heap.
 void *multiheap_virtual_address_to_physical(struct multiheap *multiheap, void *ptr)
 {
     void *phys_addr = (void *)((uintptr_t)ptr - ((uintptr_t)multiheap->max_end_data_addr));
     return phys_addr;
 }
 
+// Find which node owns this virtual address by checking each paging_heap range.
 struct multiheap_single_heap *multiheap_get_paging_heap_for_address(struct multiheap *multiheap, void *address)
 {
     struct multiheap_single_heap *current = multiheap->first_multiheap;
@@ -105,6 +119,10 @@ struct multiheap_single_heap *multiheap_get_paging_heap_for_address(struct multi
     return 0;
 }
 
+// Given any ptr (kmalloc physical OR kpalloc virtual), fill in:
+//   heap_out        — physical heap node
+//   paging_heap_out — paging-shadow node (NULL if ptr is physical)
+//   real_phys_addr  — the physical address to free on the real heap
 void multiheap_get_heap_and_paging_heap_for_address(struct multiheap *multiheap,
                                                     void *ptr,
                                                     struct multiheap_single_heap **heap_out,
@@ -127,6 +145,8 @@ void multiheap_get_heap_and_paging_heap_for_address(struct multiheap *multiheap,
     *real_phys_addr = real_addr;
 }
 
+// How many 4KB blocks this allocation occupies. For a virtual ptr we count
+// on the paging heap (contiguous virtual slots); that is how many phys pages to free.
 size_t multiheap_allocation_block_count(struct multiheap *multiheap, void *ptr)
 {
     struct multiheap_single_heap *paging_heap = NULL;
@@ -150,11 +170,13 @@ size_t multiheap_allocation_block_count(struct multiheap *multiheap, void *ptr)
     return total_blocks;
 }
 
+// Block count converted to bytes (N * 4096).
 size_t multiheap_allocation_byte_count(struct multiheap *multiheap, void *ptr)
 {
     return multiheap_allocation_block_count(multiheap, ptr) * MARROWOS_HEAP_BLOCK_SIZE;
 }
 
+// Link an already-built struct heap into the chain. Rejected after ready.
 int multiheap_add_heap(struct multiheap *multiheap, struct heap *heap, int flags)
 {
     // Don't allow heaps to be added if the multi-heap has been marked
@@ -187,12 +209,16 @@ int multiheap_add_heap(struct multiheap *multiheap, struct heap *heap, int flags
     return 0;
 }
 
+// Same as add_heap, but forces EXTERNALLY_OWNED so teardown will not free this heap
+// (used for the minimal heap, which lives in kernel BSS).
 int multiheap_add_existing_heap(struct multiheap *multiheap, struct heap *heap, int flags)
 {
     flags |= MULTIHEAP_HEAP_FLAG_EXTERNALLY_OWNED;
     return multiheap_add_heap(multiheap, heap, flags);
 }
 
+// Build a brand-new heap over an E820 range: struct + table come from starting_heap,
+// data pool is the raw [saddr, eaddr] region. Then link it into the chain.
 int multiheap_add(struct multiheap *multiheap, void *saddr, void *eaddr, int flags)
 {
     struct heap *heap = heap_zalloc(multiheap->starting_heap, sizeof(struct heap));
@@ -213,6 +239,9 @@ int multiheap_add(struct multiheap *multiheap, void *saddr, void *eaddr, int fla
     return multiheap_add_heap(multiheap, heap, flags);
 }
 
+// Free one allocation. Physical (kmalloc): mark blocks free on that heap.
+// Virtual (kpalloc): for each virtual page, reverse-translate to physical,
+// recursively free the physical block, then free the virtual slots (callback unmaps PT).
 void multiheap_free(struct multiheap *multiheap, void *ptr)
 {
     struct multiheap_single_heap *paging_heap = NULL;
@@ -244,6 +273,7 @@ void multiheap_free(struct multiheap *multiheap, void *ptr)
     }
 }
 
+// Destroy the multiheap object and every heap it owns. Leaves EXTERNALLY_OWNED heaps alone.
 void multiheap_free_heap(struct multiheap *multiheap)
 {
     struct multiheap_single_heap *current = multiheap->first_multiheap;
@@ -260,6 +290,8 @@ void multiheap_free_heap(struct multiheap *multiheap)
     heap_free(multiheap->starting_heap, multiheap);
 }
 
+// First pass: walk every physical heap, try heap_malloc for N contiguous blocks.
+// Success = identity-mapped physical ptr. Failure = fragmentation or OOM.
 void *multiheap_alloc_first_pass(struct multiheap *multiheap, size_t size)
 {
     void *allocation_ptr = NULL;
@@ -279,6 +311,8 @@ void *multiheap_alloc_first_pass(struct multiheap *multiheap, size_t size)
     return allocation_ptr;
 }
 
+// Pick a DEFRAG heap that has enough scattered free physical blocks, then
+// allocate N *contiguous* slots in its paging shadow. Returns the virtual start.
 void *multiheap_alloc_paging(struct multiheap *multiheap, size_t size, struct multiheap_single_heap **eligible_heap_out)
 {
     void *allocation_ptr = NULL;
@@ -311,6 +345,8 @@ void *multiheap_alloc_paging(struct multiheap *multiheap, size_t size, struct mu
     return allocation_ptr;
 }
 
+// Defrag: contiguous virtual range + one scattered physical 4KB page mapped to
+// each slot. Caller sees one linear buffer; physically the pages are anywhere.
 void *multiheap_alloc_second_pass(struct multiheap *multiheap, size_t size)
 {
     void *allocation_ptr = NULL;
@@ -352,14 +388,14 @@ out:
     return allocation_ptr;
 }
 
-/**
- * Called by heap.c when a block is freed, but only in paging heaps.
- */
+// Paging-heap free callback: wipe the PT entry so that virtual page is NOT PRESENT again.
 void multiheap_paging_heap_free_block(void *ptr)
 {
     paging_map(paging_current_descriptor(), ptr, NULL, 0);
 }
 
+// Point of no return. Lock adding heaps, freeze max_end_data_addr, then for every
+// DEFRAG heap create a virtual shadow (clean block table, range mapped NOT PRESENT).
 int multiheap_ready(struct multiheap *multiheap)
 {
     int res = 0;
@@ -401,6 +437,7 @@ out:
     return res;
 }
 
+// kmalloc: first pass only. No defrag. NULL if no contiguous physical run exists.
 void *multiheap_alloc(struct multiheap *multiheap, size_t size)
 {
     void *allocation_ptr = multiheap_alloc_first_pass(multiheap, size);
@@ -413,6 +450,7 @@ void *multiheap_alloc(struct multiheap *multiheap, size_t size)
     return NULL;
 }
 
+// kpalloc: first pass, then second pass if physical RAM is fragmented.
 void *multiheap_palloc(struct multiheap *multiheap, size_t size)
 {
     void *allocation_ptr = multiheap_alloc_first_pass(multiheap, size);

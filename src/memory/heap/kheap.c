@@ -11,6 +11,7 @@ struct heap_table kernel_minimal_heap_table;
 
 struct multiheap *kernel_multiheap = NULL;
 
+// First E820 type=1 region larger than HEAP_MINIMUM_SIZE_BYTES (100MB). Becomes the minimal heap.
 struct e820_entry *kheap_get_allowable_memory_region_for_minimal_heap()
 {
     struct e820_entry *entry = 0;
@@ -28,6 +29,14 @@ struct e820_entry *kheap_get_allowable_memory_region_for_minimal_heap()
     return entry;
 }
 
+// CALL AFTER paging_switch. Locks multiheap and builds paging-shadow heaps.
+void kheap_post_paging()
+{
+    multiheap_ready(kernel_multiheap);
+}
+
+// Bootstrap: minimal heap from largest E820 region, then multiheap chain of remaining type=1 regions.
+// Does NOT call multiheap_ready — paging is not live yet.
 void kheap_init()
 {
     struct e820_entry *entry = kheap_get_allowable_memory_region_for_minimal_heap();
@@ -126,11 +135,13 @@ void kheap_init()
     }
 }
 
+// Kernel malloc: first pass only (contiguous physical). Returns NULL on failure.
 void *kmalloc(size_t size)
 {
     void *ptr = multiheap_alloc(kernel_multiheap, size);
     return ptr;
 }
+// kmalloc then zero the buffer.
 void *kzalloc(size_t size)
 {
     void *ptr = kmalloc(size);
@@ -141,6 +152,7 @@ void *kzalloc(size_t size)
     return ptr;
 }
 
+// Kernel page-alloc: first pass, then second-pass defrag. Panics if even defrag fails.
 void *kpalloc(size_t size)
 {
     void *ptr = multiheap_palloc(kernel_multiheap, size);
@@ -151,6 +163,7 @@ void *kpalloc(size_t size)
     return ptr;
 }
 
+// kpalloc then zero the buffer.
 void *kpzalloc(size_t size)
 {
     void *ptr = kpalloc(size);
@@ -161,6 +174,7 @@ void *kpzalloc(size_t size)
     return ptr;
 }
 
+// Should call multiheap_free. Still a stub until that wiring lecture.
 void kfree(void *ptr)
 {
     // heap_free(&kernel_heap, ptr);

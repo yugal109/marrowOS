@@ -203,14 +203,9 @@ void kernel_main()
     // );
 
     paging_switch(kernel_paging_desc);
-    for (;;)
-    {
-        if (!kmalloc(4096))
-            break;
-    }
-    print("\n");
-    print("Memory wasted\n");
+    kheap_post_paging();
     // data[0] = 'M';
+
     // print(data);
 
     // struct heap *kernel_heap = kheap_get();

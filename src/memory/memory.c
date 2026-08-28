@@ -1,11 +1,13 @@
 #include "memory.h"
 #include "config.h"
 
+// Count of E820 entries the bootloader stored at 0x7DFE.
 size_t e820_total_entries()
 {
     return *((uint16_t *)MARROWOS_MEMORY_MAP_TOTAL_ENTRIES_LOCATION);
 }
 
+// Pointer to the Nth E820 entry in the table at 0x7E00. NULL if index is out of range.
 struct e820_entry *e820_entry(size_t index)
 {
     if (index >= e820_total_entries())
@@ -17,6 +19,7 @@ struct e820_entry *e820_entry(size_t index)
     return &entries[index];
 }
 
+// Largest type=1 (usable RAM) region. Used to pick the minimal-heap home.
 struct e820_entry *e820_largest_free_entry()
 {
     size_t total_memory_entries = e820_total_entries();
@@ -46,6 +49,7 @@ struct e820_entry *e820_largest_free_entry()
     return chosen_entry;
 }
 
+// Sum of every type=1 E820 length. Total usable RAM, not one contiguous blob.
 size_t e820_total_accessible_memory()
 {
     size_t total_memory_entries = e820_total_entries();
@@ -63,6 +67,7 @@ size_t e820_total_accessible_memory()
     return total_memory;
 }
 
+// Fill size bytes at ptr with byte c. Freestanding memset (no libc).
 void *memset(void *ptr, int c, size_t size)
 {
     char *c_ptr = (char *)ptr;
@@ -73,6 +78,7 @@ void *memset(void *ptr, int c, size_t size)
     return ptr;
 }
 
+// Compare count bytes. Returns 0 if equal, <0 or >0 like libc memcmp.
 int memcmp(void *s1, void *s2, int count)
 {
     char *c1 = s1;
@@ -87,6 +93,7 @@ int memcmp(void *s1, void *s2, int count)
     return 0;
 }
 
+// Copy len bytes from src to dest. No overlap handling.
 void *memcpy(void *dest, void *src, int len)
 {
     char *d = dest;

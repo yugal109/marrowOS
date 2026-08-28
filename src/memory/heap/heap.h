@@ -44,18 +44,25 @@ struct heap
     HEAP_BLOCK_FREE_CALLBACK_FUNCTION block_free_callback;
 };
 
+// Bind this heap to [ptr, end) and zero the block table. ptr/end must be 4096-aligned.
 int heap_create(struct heap *heap, void *ptr, void *end, struct heap_table *table);
+// Allocate size bytes (rounded up to 4096). Needs N contiguous FREE blocks or returns NULL.
 void *heap_malloc(struct heap *heap, size_t size);
+// Free the allocation starting at ptr (walks HAS_NEXT and marks those blocks FREE).
 void heap_free(struct heap *heap, void *ptr);
+// heap_malloc + memset 0.
 void *heap_zalloc(struct heap *heap, size_t size);
 size_t heap_total_size(struct heap *heap);
 size_t heap_total_available(struct heap *heap);
 size_t heap_total_used(struct heap *heap);
+// Round val up/down to MARROWOS_HEAP_BLOCK_SIZE (4096).
 uintptr_t heap_align_value_to_upper(uintptr_t val);
 uintptr_t heap_align_value_to_lower(uintptr_t val);
 bool heap_is_address_within_heap(struct heap *heap, void *ptr);
 void heap_callbacks_set(struct heap *heap, HEAP_BLOCK_ALLOCATED_CALLBACK_FUNCTION allocated_func, HEAP_BLOCK_FREE_CALLBACK_FUNCTION free_func);
+// How many 4KB blocks this one allocation occupies (follow HAS_NEXT from ptr).
 size_t heap_allocation_block_count(struct heap *heap, void *starting_address);
+// Convert a data-pool address to its block-table index: (addr - saddr) / 4096.
 int64_t heap_address_to_block(struct heap *heap, void *address);
 
 #endif

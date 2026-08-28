@@ -7,6 +7,7 @@
 
 int64_t heap_address_to_block(struct heap *heap, void *address);
 
+// Check that (end - ptr) / 4096 equals table->total. One leftover byte fails create.
 static int heap_validate_table(void *ptr, void *end, struct heap_table *table)
 {
     int res = 0;
@@ -21,11 +22,13 @@ out:
     return res;
 }
 
+// True if ptr sits on a 4096-byte boundary.
 static bool heap_validate_alignment(void *ptr)
 {
     return ((uintptr_t)ptr % MARROWOS_HEAP_BLOCK_SIZE) == 0;
 }
 
+// Bind heap to [ptr, end), set block counters, zero the table so every block is FREE.
 int heap_create(struct heap *heap, void *ptr, void *end, struct heap_table *table)
 {
     int res = 0;
@@ -58,6 +61,7 @@ out:
     return res;
 }
 
+// Round val up to the next 4096 (50 -> 4096). Heap never hands out partial pages.
 uintptr_t heap_align_value_to_upper(uintptr_t val)
 {
     if ((val % MARROWOS_HEAP_BLOCK_SIZE) == 0)
@@ -70,6 +74,7 @@ uintptr_t heap_align_value_to_upper(uintptr_t val)
     return val;
 }
 
+// Round val down to the previous 4096.
 uintptr_t heap_align_value_to_lower(uintptr_t val)
 {
     if ((val % MARROWOS_HEAP_BLOCK_SIZE) == 0)
@@ -82,23 +87,27 @@ uintptr_t heap_align_value_to_lower(uintptr_t val)
     return val;
 }
 
+// Low nibble of a table byte: FREE (0) or TAKEN (1). Flags live in the high bits.
 static int heap_get_entry_type(HEAP_BLOCK_TABLE_ENTRY entry)
 {
     // returns last 4 bits
     return entry & 0x0f;
 }
 
+// True if ptr is inside this heap's data pool [saddr, eaddr].
 bool heap_is_address_within_heap(struct heap *heap, void *ptr)
 {
     return (ptr >= heap->saddr && ptr <= heap->eaddr);
 }
 
+// Hook listeners fired per-block on take/free. Paging heaps use free -> unmap PT.
 void heap_callbacks_set(struct heap *heap, HEAP_BLOCK_ALLOCATED_CALLBACK_FUNCTION allocated_func, HEAP_BLOCK_FREE_CALLBACK_FUNCTION free_func)
 {
     heap->block_allocated_callback = allocated_func;
     heap->block_free_callback = free_func;
 }
 
+// Scan the table for total_blocks consecutive FREE entries. Returns start index or -ENOMEM.
 int64_t heap_get_start_block(struct heap *heap, uintptr_t total_blocks)
 {
     struct heap_table *table = heap->table;
@@ -134,6 +143,7 @@ int64_t heap_get_start_block(struct heap *heap, uintptr_t total_blocks)
     return block_start;
 }
 
+// Walk HAS_NEXT from starting_address and count TAKEN blocks in this one allocation.
 size_t heap_allocation_block_count(struct heap *heap, void *starting_address)
 {
     size_t count = 0;
@@ -163,11 +173,13 @@ out:
     return count;
 }
 
+// Block index -> data-pool address: saddr + block * 4096.
 void *heap_block_to_address(struct heap *heap, int64_t block)
 {
     return heap->saddr + (block * MARROWOS_HEAP_BLOCK_SIZE);
 }
 
+// Mark [start, start+n) TAKEN. First block gets IS_FIRST; all but last get HAS_NEXT. Fires alloc callback.
 void heap_mark_blocks_taken(struct heap *heap, int64_t start_block, int64_t total_blocks)
 {
     int64_t end_block = (start_block + total_blocks) - 1;
@@ -193,6 +205,7 @@ void heap_mark_blocks_taken(struct heap *heap, int64_t start_block, int64_t tota
     }
 }
 
+// Find N contiguous free blocks, mark them taken, bump used/free counters, return start address.
 void *heap_malloc_blocks(struct heap *heap, uintptr_t total_blocks)
 {
     void *address = 0;
@@ -214,6 +227,7 @@ out:
     return address;
 }
 
+// Free the chain starting at starting_block until HAS_NEXT ends. Fires free callback per block.
 void heap_mark_blocks_free(struct heap *heap, int64_t starting_block)
 {
     struct heap_table *table = heap->table;
@@ -239,11 +253,13 @@ void heap_mark_blocks_free(struct heap *heap, int64_t starting_block)
     heap->free_blocks += total_blocks_freed;
 }
 
+// Data-pool address -> block index: (address - saddr) / 4096.
 int64_t heap_address_to_block(struct heap *heap, void *address)
 {
     return ((int64_t)(address - heap->saddr)) / MARROWOS_HEAP_BLOCK_SIZE;
 }
 
+// Align size up to 4096, convert to block count, allocate that many contiguous blocks.
 void *heap_malloc(struct heap *heap, size_t size)
 {
     size_t aligned_size = heap_align_value_to_upper(size);
@@ -251,16 +267,19 @@ void *heap_malloc(struct heap *heap, size_t size)
     return heap_malloc_blocks(heap, total_blocks);
 }
 
+// Convert ptr to a block index and free that allocation chain.
 void heap_free(struct heap *heap, void *ptr)
 {
     heap_mark_blocks_free(heap, heap_address_to_block(heap, ptr));
 }
 
+// Full data-pool size in bytes (total blocks * 4096).
 size_t heap_total_size(struct heap *heap)
 {
     return heap->table->total * MARROWOS_HEAP_BLOCK_SIZE;
 }
 
+// Scan the table and sum bytes marked TAKEN. Slow path; free_blocks is the O(1) counter.
 size_t heap_total_used(struct heap *heap)
 {
     size_t total = 0;
@@ -275,11 +294,13 @@ size_t heap_total_used(struct heap *heap)
     return total;
 }
 
+// total_size - total_used.
 size_t heap_total_available(struct heap *heap)
 {
     return heap_total_size(heap) - heap_total_used(heap);
 }
 
+// heap_malloc then zero the returned bytes.
 void *heap_zalloc(struct heap *heap, size_t size)
 {
     void *ptr = heap_malloc(heap, size);

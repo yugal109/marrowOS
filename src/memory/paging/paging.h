@@ -69,19 +69,29 @@ struct paging_desc
 } __attribute__((packed));
 
 bool paging_is_aligned(void *addr);
+// Map [phys, phys_end) onto virt, one 4KB page at a time. Identity map uses virt == phys.
 int paging_map_to(struct paging_desc *desc, void *virt, void *phys, void *phys_end, int flags);
+// Map count consecutive 4KB pages starting at virt -> phys.
 int paging_map_range(struct paging_desc *desc, void *virt, void *phys, size_t count, int flags);
+// Map one 4KB page: walk/create PML4->PDPT->PD->PT, write phys>>12 + flags into the PT slot.
 int paging_map(struct paging_desc *desc, void *virt, void *phys, int flags);
 void *paging_align_to_lower_page(void *addr);
+// PT entry address<<12 plus the 12-bit page offset.
 void *paging_get_physical_address(struct paging_desc *desc, void *virtual_address);
 void *paging_align_address(void *ptr);
+// Allocate a paging_desc + empty PML4 (all zeros). Tables below PML4 are created on demand by paging_map.
 struct paging_desc *paging_desc_new(paging_map_level_t root_map_level);
 
+// Write CR3 = PML4 address (paging.asm).
 void paging_load_directory(uintptr_t *directory);
+// invlpg one virtual address (paging.asm).
 void paging_invalidate_tlb_entry(void *addr);
+// Remember this desc as current and load it into CR3.
 void paging_switch(struct paging_desc *desc);
+// Identity-map first 1MB plus every E820 type=1 region.
 int paging_map_e820_memory_regions(struct paging_desc *desc);
 struct paging_desc *paging_current_descriptor();
+// Walk 4-level tables and return a pointer to the PT entry for virt (or NULL).
 struct paging_desc_entry *paging_get(struct paging_desc *desc, void *virtual_address);
 
 // OLD CODE BELOW

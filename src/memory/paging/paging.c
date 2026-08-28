@@ -7,24 +7,27 @@
 // it’s the kernel’s “which map is live right now” pointer
 static struct paging_desc *current_paging_desc = 0;
 
+// Zeroed 512-entry PML4 (or any table-sized blob). Lower tables are born in paging_map.
 struct paging_pml_entries *paging_pml4_entries_new()
 {
     struct paging_pml_entries *entries_desc = kzalloc(sizeof(struct paging_pml_entries));
     return entries_desc;
 }
 
+// Only 4-level paging is supported (Intel PML5 not implemented).
 static bool paging_map_level_is_valid(paging_map_level_t level)
 {
     // level 5 not supported yet
     return level == PAGING_MAP_LEVEL_4;
 }
 
+// The paging_desc last loaded into CR3 via paging_switch.
 struct paging_desc *paging_current_descriptor()
 {
     return current_paging_desc;
 }
 
-// rounds the pointer up to the next 4kb page
+// Round ptr up to the next 4KB page. Used so mappings never start mid-page.
 void *paging_align_address(void *ptr)
 {
     if ((uintptr_t)ptr % PAGING_PAGE_SIZE)
@@ -34,7 +37,7 @@ void *paging_align_address(void *ptr)
     return ptr;
 }
 
-// rounds down the start of the page that contains addr
+// Round addr down to the start of its 4KB page.
 void *paging_align_to_lower_page(void *addr)
 {
     uintptr_t _addr = (uintptr_t)addr;
@@ -42,12 +45,14 @@ void *paging_align_to_lower_page(void *addr)
     return (void *)_addr;
 }
 
+// Make desc live: remember it, then CR3 = address of its PML4.
 void paging_switch(struct paging_desc *desc)
 {
     current_paging_desc = desc;
     paging_load_directory((uint64_t *)(&desc->pml->entries[0]));
 }
 
+// Allocate a paging_desc + empty PML4. PDPT/PD/PT tables are created lazily by paging_map.
 struct paging_desc *paging_desc_new(paging_map_level_t root_map_level)
 {
     if (!paging_map_level_is_valid(root_map_level))
@@ -68,17 +73,20 @@ struct paging_desc *paging_desc_new(paging_map_level_t root_map_level)
     return desc;
 }
 
+// True if addr is 4096-aligned.
 bool paging_is_aligned(void *addr)
 {
     return ((uintptr_t)addr % PAGING_PAGE_SIZE) == 0;
 }
 
+// True if this 8-byte paging entry is all zeros (no table / no mapping yet).
 static bool paging_null_entry(struct paging_desc_entry *entry)
 {
     struct paging_desc_entry null_desc = {0};
     return memcmp(entry, &null_desc, sizeof(struct paging_desc_entry)) == 0;
 }
 
+// Map one 4KB page virt -> phys. Creates missing PDPT/PD/PT tables as needed, then writes the PT slot.
 int paging_map(struct paging_desc *desc, void *virt, void *phys, int flags)
 {
     int res = 0;
@@ -145,6 +153,7 @@ int paging_map(struct paging_desc *desc, void *virt, void *phys, int flags)
     return res;
 }
 
+// Identity-map first 1MB (VGA/BIOS) plus every E820 type=1 region. Call before paging_switch.
 int paging_map_e820_memory_regions(struct paging_desc *desc)
 {
     // Force-map the first 1MB regardless of E820 — VGA (0xB8000), BIOS data,
@@ -186,6 +195,7 @@ int paging_map_e820_memory_regions(struct paging_desc *desc)
     return 0;
 }
 
+// Map count consecutive pages: virt+i*4096 -> phys+i*4096.
 int paging_map_range(struct paging_desc *desc, void *virt, void *phys, size_t count, int flags)
 {
     int res = 0;
@@ -201,6 +211,7 @@ int paging_map_range(struct paging_desc *desc, void *virt, void *phys, size_t co
     return res;
 }
 
+// Map the byte range [phys, phys_end) onto virt. All three addresses must be page-aligned.
 int paging_map_to(struct paging_desc *desc, void *virt, void *phys, void *phys_end, int flags)
 {
     int res = 0;
@@ -244,6 +255,7 @@ out:
     return res;
 }
 
+// Walk PML4 -> PDPT -> PD -> PT using virt's 9-bit indexes. Returns the PT entry pointer (or NULL).
 struct paging_desc_entry *paging_get(struct paging_desc *desc, void *virtual_address)
 {
     uintptr_t va = (uintptr_t)virtual_address;
@@ -271,6 +283,7 @@ struct paging_desc_entry *paging_get(struct paging_desc *desc, void *virtual_add
     return &pt_entries[pt_index];
 }
 
+// Physical byte address for virt: (PT.address << 12) + (virt & 0xFFF).
 void *paging_get_physical_address(struct paging_desc *desc, void *virtual_address)
 {
     struct paging_desc_entry *desc_entry = paging_get(desc, virtual_address);
