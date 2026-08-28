@@ -210,7 +210,7 @@ load32:
 
     ; For the loading....
     mov eax,1 ; starting sector to load from
-    mov ecx,100 ; total sectors we wanna load
+    mov ecx,250 ; total sectors we wanna load
     mov edi,0x0100000 ; address where we want to load 
 
 

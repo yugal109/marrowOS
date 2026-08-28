@@ -1,7 +1,7 @@
 #include "kernel.h"
 #include <stddef.h>
 #include <stdint.h>
-// #include "idt/idt.h"
+#include "idt/idt.h"
 // #include "io/io.h"
 #include "memory/memory.h"
 #include "memory/heap/heap.h"
@@ -162,6 +162,8 @@ void kernel_page()
     paging_switch(kernel_paging_desc);
 }
 
+extern void div_test();
+
 void kernel_main()
 {
     terminal_initialize();
@@ -204,6 +206,13 @@ void kernel_main()
 
     paging_switch(kernel_paging_desc);
     kheap_post_paging();
+
+    idt_init();
+    print("hello\n");
+    div_test();
+    // shouldnt be shown "oi"
+    print("oi\n");
+
     // data[0] = 'M';
 
     // print(data);

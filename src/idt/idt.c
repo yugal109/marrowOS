@@ -2,6 +2,7 @@
 #include "config.h"
 #include "memory/memory.h"
 #include "kernel.h"
+#include "memory/heap/kheap.h"
 #include "task/process.h"
 #include "task/task.h"
 #include "io/io.h"
@@ -23,19 +24,22 @@ extern void isr80h_wrapper();
 
 void interrupt_handler(int interrupt, struct interrupt_frame *frame)
 {
-    kernel_page();
-    if (interrupt_callbacks[interrupt] != 0)
-    {
-        task_current_save_state(frame);
-        interrupt_callbacks[interrupt](frame);
-    }
-    task_page();
+    // kernel_page();
+    // if (interrupt_callbacks[interrupt] != 0)
+    // {
+    //     task_current_save_state(frame);
+    //     interrupt_callbacks[interrupt](frame);
+    // }
+    // task_page();
     outb(0x20, 0x20);
 }
 
 void idt_zero_handler()
 {
     print("Divide by zero error.\n");
+    while (1)
+    {
+    }
 }
 
 void no_interrupt_handler()
@@ -46,32 +50,38 @@ void no_interrupt_handler()
 void idt_set(int interrupt_no, void *address)
 {
     struct idt_desc *desc = &idtr_descriptors[interrupt_no];
-    desc->offset_1 = (uint32_t)address & 0x0000ffff;
-    desc->selector = KERNEL_CODE_SELECTOR;
-    desc->zero = 0x00;
+    uintptr_t _address = (uintptr_t)address;
+    desc->offset_1 = _address & 0x000000000000ffff;
+    desc->selector = KERNEL_LONG_MODE_CODE_SELECTOR;
+    desc->ist = 0;
     desc->type_attr = 0xEE;
-    desc->offset_2 = (uint32_t)address >> 16;
+    if (interrupt_no <= 0x31)
+    {
+        desc->type_attr = 0x8E;
+    }
+    desc->offset_2 = (_address >> 16) & 0x000000000000ffff;
+    desc->offset_3 = (_address >> 32) & 0x00000000ffffffff;
 }
 
 void idt_handle_exception()
 {
-    process_terminate(task_current()->process);
-    task_next();
+    // process_terminate(task_current()->process);
+    // task_next();
 }
 
 void idt_clock()
 {
 
-    outb(0x20, 0x20);
+    // outb(0x20, 0x20);
     // switch to next task
-    task_next();
+    // task_next();
 }
 
 void idt_init()
 {
     memset(idtr_descriptors, 0, sizeof(idtr_descriptors));
     idtr_descriptor.limit = sizeof(idtr_descriptors) - 1;
-    idtr_descriptor.base = (uint32_t)idtr_descriptors;
+    idtr_descriptor.base = (uint64_t)idtr_descriptors;
 
     for (int i = 0; i < MARROWOS_TOTAL_INTERRUPTS; i++)
     {
@@ -85,7 +95,7 @@ void idt_init()
         idt_register_interrupt_callback(i, idt_handle_exception);
     }
 
-    idt_register_interrupt_callback(0x20, idt_clock);
+    // idt_register_interrupt_callback(0x20, idt_clock);
     // Load the interrupt descriptor table
     idt_load(&idtr_descriptor);
 }
@@ -137,11 +147,11 @@ void *isr80h_handle_command(int command, struct interrupt_frame *frame)
 void *isr80h_handler(int command, struct interrupt_frame *frame)
 {
     void *res = 0;
-    kernel_page();
+    // kernel_page();
 
-    task_current_save_state(frame);
-    res = isr80h_handle_command(command, frame);
+    // task_current_save_state(frame);
+    // res = isr80h_handle_command(command, frame);
 
-    task_page();
+    // task_page();
     return res;
 }

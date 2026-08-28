@@ -4,6 +4,7 @@ section .asm
 
 global _start
 global kernel_registers
+global div_test
 extern kernel_main
 
 ; Segment Selectors
@@ -76,6 +77,11 @@ long_mode_entry:
 
     jmp $
 
+div_test:
+    mov rax, 0
+    idiv rax 
+    ret 
+
 ; Global descriptor table (GDT)
 align 8 
 gdt: 
@@ -115,6 +121,21 @@ gdt:
     db 0x00             ; Long mode data segment has flag to zero
     db 0x00             ; Base address high
 
+    ; 64-bit user code segment descriptor
+    dw 0x0000           ; Segment limit low
+    dw 0x0000           ; Base address low
+    db 0x00             ; Base address middle
+    db 0xFA             ; Access byte data segment, read/write, present, user mode
+    db 0x20             ; Long mode data segment has flag to zero
+    db 0x00             ; Base address high         ; 
+
+    ; 64-bit user data segment
+    dw 0x0000           ; Segment limit low
+    dw 0x0000           ; Base address low
+    db 0x00             ; Base address middle
+    db 0xF2             ; Access byte data segment, read/write, present, user mode
+    db 0x00             ; Long mode data segment has flag to zero
+    db 0x00             ; Base address high
 
 gdt_end:
 

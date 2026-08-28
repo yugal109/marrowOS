@@ -1,4 +1,5 @@
 [BITS 64]
+default rel
 section .asm
 
 extern idt_zero_handler
@@ -56,7 +57,7 @@ idt_load:
 
 idt_zero:
     call idt_zero_handler
-    iret
+    iretq
 
 
 
@@ -114,7 +115,7 @@ isr80h_wrapper:
     mov rdi,rax
 
     call isr80h_handler
-    mov dword[tmp_res], rax
+    mov qword [tmp_res], rax
 
 
     ; Restore general purpose registers for user land
