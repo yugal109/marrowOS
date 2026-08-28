@@ -1,3 +1,4 @@
+[BITS 64]
 section .asm
 
 extern idt_zero_handler
@@ -49,13 +50,8 @@ disable_interrupts:
     ret
 
 idt_load:
-    push ebp
-    mov ebp,esp
-
-    mov ebx,[ebp+8]
-    lidt [ebx]
-
-    pop ebp
+    mov rbx, rdi 
+    lidt [rbx]   
     ret
 
 idt_zero:
@@ -69,27 +65,26 @@ no_interrupt:
     call no_interrupt_handler
     popad_macro
     sti
-    iret
+    iretq
 
 %macro interrupt 1
     global int%1
     int%1:
         ; INTERRUPT FRAME START => interrupt_frame: raw stack snapshot of CPU state at interrupt time, read via this ESP pointer
         ; ALREADY PUSHED TO US BY THE PROCESSOR UPON ENTRY TO THIS INTERRUPT;
-        ; uint32_t ip;
-        ; uint32_t cs;
-        ; uint32_t flags;
-        ; uint32_t sp;
-        ; uint32_t ss;
+        ; uint64_t ip
+        ; uint64_t cs;
+        ; uint64_t flags
+        ; uint64_t sp;
+        ; uint64_t ss;
         ; Pushes the general purpose registers to the stack
         pushad_macro
         ; Interrupt frame end
-        push esp
-        push dword %1
+        mov rdi, %1
+        mov rsi,rsp
         call interrupt_handler
-        add esp, 8
         popad_macro
-        iret
+        iretq
 %endmacro  
 
 ; a for loop that goes for 512 times and it calls our macro
@@ -103,37 +98,37 @@ isr80h_wrapper:
 
     ; INTERRUPT FRAME START => interrupt_frame: raw stack snapshot of CPU state at interrupt time, read via this ESP pointer
     ; ALREADY PUSHED TO US BY THE PROCESSOR UPON ENTRY TO THIS INTERRUPT;
-    ; uint32_t ip;
-    ; uint32_t cs;
-    ; uint32_t flags;
-    ; uint32_t sp;
-    ; uint32_t ss;
+    ; uint64_t ip
+    ; uint64_t cs;
+    ; uint64_t flags
+    ; uint64_t sp;
+    ; uint64_t ss;
     ; Pushes the general purpose registers to the stack
     pushad_macro
 
     ; INTERRUPT FRAME END
-    ; Push the stack pointer so that we are pointing to the interrupt frame
-    push esp
+    ; Second argument is the interrupt stack pointer
+    mov rsi,rsp
 
-    ; EAX holds our command lets push it to the stack for isr80h_handler 
-    push eax
+    ; rax holds our first argument
+    mov rdi,rax
+
     call isr80h_handler
-    mov dword[tmp_res], eax
-    add esp, 8
+    mov dword[tmp_res], rax
 
 
     ; Restore general purpose registers for user land
     popad_macro
-    mov eax,[tmp_res]
-    iretd
+    mov rax,[tmp_res]
+    iretq
 
 section .data
 ; Inside here is stored the return result from isr80h_handler
 tmp_res:
-    dd 0
+    dq 0
 
 %macro interrupt_array_entry 1
-    dd int%1
+    dq int%1
 %endmacro
 
 interrupt_pointer_table:
