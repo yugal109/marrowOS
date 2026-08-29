@@ -18,6 +18,6 @@ struct paging_desc *kernel_desc();
 
 #define ERROR(value) ((void *)(intptr_t)(value))
 #define ERROR_I(value) ((int)(intptr_t)(value))
-#define ISERR(value) ((int)(intptr_t)(value) < 0)
+#define ISERR(value) ((int)(int64_t)(value) < 0)
 
 #endif
