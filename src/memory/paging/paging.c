@@ -3,15 +3,85 @@
 #include "memory/memory.h"
 #include "memory/heap/heap.h"
 #include "status.h"
+#include "kernel.h"
 
 // it’s the kernel’s “which map is live right now” pointer
 static struct paging_desc *current_paging_desc = 0;
+
+// True if this 8-byte paging entry is all zeros (no table / no mapping yet).
+static bool paging_null_entry(struct paging_desc_entry *entry)
+{
+    struct paging_desc_entry null_desc = {0};
+    return memcmp(entry, &null_desc, sizeof(struct paging_desc_entry)) == 0;
+}
 
 // Zeroed 512-entry PML4 (or any table-sized blob). Lower tables are born in paging_map.
 struct paging_pml_entries *paging_pml4_entries_new()
 {
     struct paging_pml_entries *entries_desc = kzalloc(sizeof(struct paging_pml_entries));
     return entries_desc;
+}
+
+void paging_desc_entry_free(struct paging_desc_entry *table_entry, paging_map_level_t level)
+{
+    if (paging_null_entry(table_entry))
+    {
+        return;
+    }
+    if (level == 0)
+    {
+        panic("The level must be a page table entry\n");
+    }
+
+    if (level > PAGING_MAP_LEVEL_4)
+    {
+        panic("Level five and higher is not supported\n");
+    }
+
+    if (level > 1)
+    {
+        // Loop through the child tables
+        for (int i = 0; i < PAGING_TOTAL_ENTRIES_PER_TABLE; i++)
+        {
+            struct paging_desc_entry *entry = &table_entry[i];
+            if (!paging_null_entry(entry))
+            {
+                struct paging_desc_entry *child_entry =
+                    (struct paging_desc_entry *)((uint64_t)(entry->address) << 12);
+                if (child_entry)
+                {
+                    paging_desc_entry_free(child_entry, level - 1);
+                }
+            }
+        }
+    }
+    kfree(table_entry);
+}
+
+void paging_desc_free(struct paging_desc *desc)
+{
+    paging_map_level_t level = desc->level;
+    // loop through all entries and free
+    for (int i = 0; i < PAGING_TOTAL_ENTRIES_PER_TABLE; i++)
+    {
+        // Free all the root entires PML4|5
+        struct paging_desc_entry *entry = &desc->pml->entries[i];
+        if (!paging_null_entry(entry))
+        {
+            struct paging_desc_entry *child_entry = (struct paging_desc_entry *)((uint64_t)(entry->address) << 12);
+            if (child_entry)
+            {
+                // subtract 1 so the level does down once
+                paging_desc_entry_free(child_entry, level - 1);
+            }
+        }
+    }
+
+    // free pml structure
+    kfree(desc->pml);
+
+    // free the descriptor
+    kfree(desc);
 }
 
 // Only 4-level paging is supported (Intel PML5 not implemented).
@@ -77,13 +147,6 @@ struct paging_desc *paging_desc_new(paging_map_level_t root_map_level)
 bool paging_is_aligned(void *addr)
 {
     return ((uintptr_t)addr % PAGING_PAGE_SIZE) == 0;
-}
-
-// True if this 8-byte paging entry is all zeros (no table / no mapping yet).
-static bool paging_null_entry(struct paging_desc_entry *entry)
-{
-    struct paging_desc_entry null_desc = {0};
-    return memcmp(entry, &null_desc, sizeof(struct paging_desc_entry)) == 0;
 }
 
 // Map one 4KB page virt -> phys. Creates missing PDPT/PD/PT tables as needed, then writes the PT slot.
@@ -262,8 +325,8 @@ struct paging_desc_entry *paging_get(struct paging_desc *desc, void *virtual_add
 
     size_t pml4_index = (va >> 39) & 0x1FF;
     size_t pdpt_index = (va >> 30) & 0x1FF;
-    size_t pd_index   = (va >> 21) & 0x1FF;
-    size_t pt_index   = (va >> 12) & 0x1FF;
+    size_t pd_index = (va >> 21) & 0x1FF;
+    size_t pt_index = (va >> 12) & 0x1FF;
 
     struct paging_desc_entry *pml4_entry = &desc->pml->entries[pml4_index];
     if (paging_null_entry(pml4_entry))
