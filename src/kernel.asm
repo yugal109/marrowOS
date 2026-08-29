@@ -86,8 +86,10 @@ div_test:
 align 8 
 gdt: 
     ; Null descriptor (required)
+    ; 0x00
     dq 0x0000000000000000 
 
+    ; 0x08
     ; 32-Bit code segment descriptor
     dw 0xffff ; Segment limit 0-15 bits
     dw 0    ; Base first 0-15 bits
@@ -97,6 +99,7 @@ gdt:
     db 0         ; Base 24-31 bits
 
 
+    ; 0x10
     ; 32 bit Data segment descriptor
     dw 0xffff   ; Segment limit first 0-15 bits
     dw 0        ; Base first 0-15 bits
@@ -105,6 +108,7 @@ gdt:
     db 11001111b ; High  bit flags and low 4 bit flags
     db 0        ; Base 24-31 bits
 
+    ; 0x18
     ; 64 bit code segment descriptor
     dw 0x0000               ; Segment limit low (ignored in long mode)
     dw 0x0000               ; Base address low
@@ -113,6 +117,7 @@ gdt:
     db 0x20                 ; Flag: Long MOde Segment
     db 0x00                 ; Base address high
 
+    ; 0x20
     ; 64 bit data segment descriptor
     dw 0x0000           ; Segment limit low
     dw 0x0000           ; Base address low
@@ -121,6 +126,7 @@ gdt:
     db 0x00             ; Long mode data segment has flag to zero
     db 0x00             ; Base address high
 
+    ; 0x28
     ; 64-bit user code segment descriptor
     dw 0x0000           ; Segment limit low
     dw 0x0000           ; Base address low
@@ -129,6 +135,7 @@ gdt:
     db 0x20             ; Long mode data segment has flag to zero
     db 0x00             ; Base address high         ; 
 
+    ; 0x30
     ; 64-bit user data segment
     dw 0x0000           ; Segment limit low
     dw 0x0000           ; Base address low

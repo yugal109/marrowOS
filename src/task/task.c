@@ -1,12 +1,11 @@
 #include "task.h"
-#include "memory/memory.h"
-#include "memory/paging/paging.h"
-#include "memory/heap/kheap.h"
+#include "kernel.h"
 #include "status.h"
 #include "process.h"
-#include "kernel.h"
-#include "config.h"
+#include "memory/heap/kheap.h"
+#include "memory/memory.h"
 #include "string/string.h"
+#include "memory/paging/paging.h"
 #include "loader/formats/elfloader.h"
 #include "idt/idt.h"
 
@@ -22,6 +21,44 @@ int task_init(struct task *task, struct process *process);
 struct task *task_current()
 {
     return current_task;
+}
+
+struct task *task_new(struct process *process)
+{
+    int res = 0;
+    struct task *task = kzalloc(sizeof(struct task));
+    if (!task)
+    {
+        res = -ENOMEM;
+        goto out;
+    }
+
+    res = task_init(task, process);
+    if (res != MARROWOS_ALL_OK)
+    {
+        goto out;
+    }
+
+    if (task_head == 0)
+    {
+        task_head = task;
+        task_tail = task;
+        current_task = task;
+        goto out;
+    }
+
+    task_tail->next = task;
+    task->prev = task_tail;
+    task_tail = task;
+
+out:
+    if (ISERR(res))
+    {
+        task_free(task);
+        return ERROR(res);
+    }
+
+    return task;
 }
 
 struct task *task_get_next()
@@ -40,10 +77,12 @@ static void task_list_remove(struct task *task)
     {
         task->prev->next = task->next;
     }
+
     if (task == task_head)
     {
         task_head = task->next;
     }
+
     if (task == task_tail)
     {
         task_tail = task->prev;
@@ -57,49 +96,12 @@ static void task_list_remove(struct task *task)
 
 int task_free(struct task *task)
 {
-    paging_free_4gb(task->page_directory);
+    paging_desc_free(task->paging_desc);
     task_list_remove(task);
 
-    // Finally free the task data;
+    // Finally free the task data
     kfree(task);
     return 0;
-}
-
-struct task *task_new(struct process *process)
-{
-    int res = 0;
-    struct task *task = kzalloc(sizeof(struct task));
-    if (!task)
-    {
-        res = -ENOMEM;
-        goto out;
-    }
-    res = task_init(task, process);
-    if (res != MARROWOS_ALL_OK)
-    {
-        goto out;
-    }
-
-    if (task_head == 0)
-    {
-        task_head = task;
-        task_tail = task;
-        current_task = task;
-        current_task = task;
-        goto out;
-    }
-
-    task_tail->next = task;
-    task->prev = task_tail;
-    task_tail = task;
-
-out:
-    if (ISERR(res))
-    {
-        task_free(task);
-        return ERROR(res);
-    }
-    return task;
 }
 
 void task_next()
@@ -109,6 +111,7 @@ void task_next()
     {
         panic("No more tasks!\n");
     }
+
     task_switch(next_task);
     task_return(&next_task->registers);
 }
@@ -116,25 +119,39 @@ void task_next()
 int task_switch(struct task *task)
 {
     current_task = task;
-    paging_switch(task->page_directory);
+    paging_switch(task->paging_desc);
     return 0;
 }
 
-int task_save_state(struct task *task, struct interrupt_frame *frame)
+struct paging_desc *task_paging_desc(struct task *task)
+{
+    return task->paging_desc;
+}
+
+struct paging_desc *task_current_paging_desc()
+{
+    if (!current_task)
+    {
+        panic("NO task yet\n");
+    }
+
+    return task_paging_desc(current_task);
+}
+
+void task_save_state(struct task *task, struct interrupt_frame *frame)
 {
     task->registers.ip = frame->ip;
     task->registers.cs = frame->cs;
     task->registers.flags = frame->flags;
-    task->registers.esp = frame->esp;
+    task->registers.rsp = frame->rsp;
     task->registers.ss = frame->ss;
-    task->registers.eax = frame->eax;
-    task->registers.ebp = frame->ebp;
-    task->registers.ebx = frame->ebx;
-    task->registers.ecx = frame->ecx;
-    task->registers.edi = frame->edi;
-    task->registers.edx = frame->edx;
-    task->registers.esi = frame->esi;
-    return 0;
+    task->registers.rax = frame->rax;
+    task->registers.rbp = frame->rbp;
+    task->registers.rbx = frame->rbx;
+    task->registers.rcx = frame->rcx;
+    task->registers.rdi = frame->rdi;
+    task->registers.rdx = frame->rdx;
+    task->registers.rsi = frame->rsi;
 }
 
 int copy_string_from_task(struct task *task, void *virtual, void *phys, int max)
@@ -145,43 +162,57 @@ int copy_string_from_task(struct task *task, void *virtual, void *phys, int max)
     }
 
     int res = 0;
-
     char *tmp = kzalloc(max);
     if (!tmp)
     {
         res = -ENOMEM;
         goto out;
     }
-    uint32_t *task_directory = task->page_directory->directory_entry;
-    uint32_t old_entry = paging_get(task_directory, tmp);
 
-    paging_map(task->page_directory, tmp, tmp, PAGING_IS_WRITEABLE | PAGING_IS_PRESENT | PAGING_ACCESS_FROM_ALL);
-    paging_switch(task->page_directory);
+    // L44 adds kernel_desc(); until then current CR3 is kernel while we are in kernel_page.
+    void *phys_tmp = paging_get_physical_address(kernel_desc(), tmp);
+    struct paging_desc *task_desc = task_paging_desc(task);
+    struct paging_desc_entry old_entry;
+    memcpy(&old_entry, paging_get(task_desc, phys_tmp), sizeof(struct paging_desc_entry));
+
+    int old_entry_flags = 0;
+    if (old_entry.present)
+        old_entry_flags |= PAGING_IS_PRESENT;
+    if (old_entry.read_write)
+        old_entry_flags |= PAGING_IS_WRITEABLE;
+    if (old_entry.user_supervisor)
+        old_entry_flags |= PAGING_ACCESS_FROM_ALL;
+
+    paging_map(task_desc, phys_tmp, phys_tmp, PAGING_IS_WRITEABLE | PAGING_IS_PRESENT | PAGING_ACCESS_FROM_ALL);
+
+    // Switch to the user pages
+    task_page_task(task);
+    // we are now on the page tables of the task
     strncpy(tmp, virtual, max);
+
+    // switch back to kernel page tables
     kernel_page();
-    res = paging_set(task_directory, tmp, old_entry);
-    if (res < 0)
-    {
-        res = -EIO;
-        goto out_free;
-    }
 
     strncpy(phys, tmp, max);
 
-out_free:
-    kfree(tmp);
+    // Remap back to what it was before.
+    paging_map(task_desc, phys_tmp, (void *)((uint64_t)(old_entry.address << 12)), old_entry_flags);
 out:
+    if (tmp)
+    {
+        kfree(tmp);
+    }
     return res;
 }
 
 void task_current_save_state(struct interrupt_frame *frame)
 {
-    struct task *task = task_current();
-    if (!task)
+    if (!task_current())
     {
         panic("No current task to save\n");
     }
 
+    struct task *task = task_current();
     task_save_state(task, frame);
 }
 
@@ -195,7 +226,7 @@ int task_page()
 int task_page_task(struct task *task)
 {
     user_registers();
-    paging_switch(task->page_directory);
+    paging_switch(task_paging_desc(task));
     return 0;
 }
 
@@ -203,8 +234,9 @@ void task_run_first_ever_task()
 {
     if (!current_task)
     {
-        panic("task run_first_ever_task(): No current task exists! \n");
+        panic("task_run_first_ever_task(): No current task exists!\n");
     }
+
     task_switch(task_head);
     task_return(&task_head->registers);
 }
@@ -212,22 +244,22 @@ void task_run_first_ever_task()
 int task_init(struct task *task, struct process *process)
 {
     memset(task, 0, sizeof(struct task));
-
-    // Map the entire 4gb address space to its self
-    task->page_directory = paging_new_4gb(PAGING_IS_PRESENT | PAGING_ACCESS_FROM_ALL);
-    if (!task->page_directory)
+    task->paging_desc = paging_desc_new(PAGING_MAP_LEVEL_4);
+    if (!task->paging_desc)
     {
         return -EIO;
     }
+
     task->registers.ip = MARROWOS_PROGRAM_VIRTUAL_ADDRESS;
     if (process->filetype == PROCESS_FILE_TYPE_ELF)
     {
-
-        task->registers.ip = elf_header(process->elf_file)->e_entry;
+        panic("Elf files not supported\n");
+        // task->registers.ip = elf_header(process->elf_file)->e_entry;
     }
+
     task->registers.ss = USER_DATA_SEGMENT;
     task->registers.cs = USER_CODE_SEGMENT;
-    task->registers.esp = MARROWOS_PROGRAM_VIRTUAL_STACK_ADDRESS_START;
+    task->registers.rsp = MARROWOS_PROGRAM_VIRTUAL_STACK_ADDRESS_START;
     task->process = process;
 
     return 0;
@@ -237,12 +269,13 @@ void *task_get_stack_item(struct task *task, int index)
 {
     void *result = 0;
 
-    uint32_t *sp_ptr = (uint32_t *)task->registers.esp;
+    uint64_t *sp_ptr = (uint64_t *)task->registers.rsp;
 
     // Switch to the given tasks page
     task_page_task(task);
 
     result = (void *)sp_ptr[index];
+
     // Switch back to the kernel page
     kernel_page();
 
@@ -251,5 +284,5 @@ void *task_get_stack_item(struct task *task, int index)
 
 void *task_virtual_address_to_physical(struct task *task, void *virtual_address)
 {
-    return paging_get_physical_address(task->page_directory->directory_entry, virtual_address);
+    return paging_get_physical_address(task->paging_desc, virtual_address);
 }
