@@ -6,19 +6,18 @@ global task_return
 global user_registers
 
 ; void task_return(struct registers* regs)
-task_return: ; (emulating an interrupt here on our own to be able to invoke 'iret/iretd' and enter user land )
-    push dword[rdi+88] ; SS
-    push qword[rdi+80] ; RSP
-    mov rax,[rdi+80]; RSP
-    or rax,0x200 ; Set IF Bit
+; rdi = regs (SysV). Fake an interrupt frame, then iretq into ring 3.
+; struct registers: 0 rdi, 8 rsi, 16 rbp, 24 rbx, 32 rdx, 40 rcx, 48 rax,
+;                   56 ip, 64 cs, 72 flags, 80 rsp, 88 ss
+task_return:
+    push qword [rdi+88] ; SS
+    push qword [rdi+80] ; RSP
+    mov rax, [rdi+72]   ; RFLAGS
+    or rax, 0x200       ; IF
     push rax
-
-    push qword 0x2B ; User data segment
-    push qword[rdi+56]; RIP
-    call restore_general_purpose_registers 
-    add esp, 4
-
-    ; let's leave kernel and go to user land
+    push qword [rdi+64] ; CS (user code 0x2B, not data)
+    push qword [rdi+56] ; RIP
+    call restore_general_purpose_registers
     iretq
 
 ; void restore_general_purpose_registers(struct registers* regs);
@@ -29,16 +28,14 @@ restore_general_purpose_registers:
     mov rdx, [rdi+32]
     mov rcx, [rdi+40]
     mov rax, [rdi+48]
-
-    ; Finally RDI
     mov rdi, [rdi]
     ret
 
 ; void user_registers()
 user_registers:
-    mov ax, 0x2B ; User data segment | privileged bit
-    mov ds,ax
-    mov es,ax
-    mov fs,ax
-    mov gs,ax
+    mov ax, 0x33 ; USER_DATA_SEGMENT (0x30 | 3). 0x2B is CS.
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
     ret

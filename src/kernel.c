@@ -164,6 +164,11 @@ void kernel_page()
 
 extern void div_test();
 
+struct paging_desc *kernel_desc()
+{
+    return kernel_paging_desc;
+}
+
 void kernel_main()
 {
     terminal_initialize();
