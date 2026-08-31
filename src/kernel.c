@@ -13,8 +13,8 @@
 // #include "disk/streamer.h"
 // #include "task/task.h"
 // #include "task/process.h"
-// #include "gdt/gdt.h"
-// #include "task/tss.h"
+#include "gdt/gdt.h"
+#include "task/tss.h"
 // #include "fs/file.h"
 // #include "idt/idt.h"
 #include "status.h"
@@ -127,7 +127,6 @@ void panic(const char *msg)
 //     paging_switch(kernel_chunk);
 // };
 
-// struct tss tss;
 // struct gdt gdt_real[MARROWOS_TOTAL_GDT_SEGMENTS];
 // struct gdt_structured gdt_structured[MARROWOS_TOTAL_GDT_SEGMENTS] = {
 //     {.base = 0x00,
@@ -154,6 +153,9 @@ void panic(const char *msg)
 
 // };
 
+struct tss tss;
+extern struct gdt_entry gdt[];
+
 struct paging_desc *kernel_paging_desc = 0;
 
 void kernel_page()
@@ -161,8 +163,6 @@ void kernel_page()
     kernel_registers();
     paging_switch(kernel_paging_desc);
 }
-
-extern void div_test();
 
 struct paging_desc *kernel_desc()
 {
@@ -213,10 +213,25 @@ void kernel_main()
     kheap_post_paging();
 
     idt_init();
-    print("hello\n");
-    div_test();
-    // shouldnt be shown "oi"
-    print("oi\n");
+
+    // Allocate a 1 MB stack for the kernel IDT
+    size_t stack_size = 1024 * 1024;
+    void *megabyte_stack_tss_end = kzalloc(stack_size);
+    void *megabyte_stack_tss_begin = (void *)(((uintptr_t)megabyte_stack_tss_end) + stack_size);
+    if (megabyte_stack_tss_begin)
+    {
+    }
+
+    // block the first  page
+    paging_map(kernel_desc(), megabyte_stack_tss_end, megabyte_stack_tss_end, 0);
+
+    // setup the TSS
+    memset(&tss, 0x00, sizeof(tss));
+    tss.rsp0 = (uint64_t)megabyte_stack_tss_end;
+    tss.iopb_offset = sizeof(tss); // No I/O permissions are used
+
+    struct tss_desc_64 *tssdesc = (struct tss_desc_64 *)&gdt[KERNEL_LONG_MODE_CODE_GDT_INDEX];
+    gdt_set_tss(tssdesc, &tss, sizeof(tss) - 1, TSS_DESCRIPTOR_TYPE, 0x00);
 
     // data[0] = 'M';
 

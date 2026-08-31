@@ -5,6 +5,7 @@ section .asm
 global _start
 global kernel_registers
 global div_test
+global gdt
 extern kernel_main
 
 ; Segment Selectors
@@ -84,11 +85,14 @@ div_test:
 
 ; Global descriptor table (GDT)
 align 8 
-gdt: 
+gdt:
+    ;------------------------------------------------------------------------------------------
     ; Null descriptor (required)
     ; 0x00
     dq 0x0000000000000000 
+    ;------------------------------------------------------------------------------------------
 
+    ;------------------------------------------------------------------------------------------
     ; 0x08
     ; 32-Bit code segment descriptor
     dw 0xffff ; Segment limit 0-15 bits
@@ -97,8 +101,9 @@ gdt:
     db 0x9a ; Access byte
     db 11001111b ; Hi gh 4 bit flags and the low 4 bit flags
     db 0         ; Base 24-31 bits
+    ;------------------------------------------------------------------------------------------
 
-
+    ;------------------------------------------------------------------------------------------
     ; 0x10
     ; 32 bit Data segment descriptor
     dw 0xffff   ; Segment limit first 0-15 bits
@@ -107,7 +112,9 @@ gdt:
     db 0x92     ; Access byte
     db 11001111b ; High  bit flags and low 4 bit flags
     db 0        ; Base 24-31 bits
+    ;------------------------------------------------------------------------------------------
 
+    ;------------------------------------------------------------------------------------------
     ; 0x18
     ; 64 bit code segment descriptor
     dw 0x0000               ; Segment limit low (ignored in long mode)
@@ -116,7 +123,9 @@ gdt:
     db 0x9A                 ; Access byte: Code segment, executable and eradable
     db 0x20                 ; Flag: Long MOde Segment
     db 0x00                 ; Base address high
+    ;------------------------------------------------------------------------------------------
 
+    ;------------------------------------------------------------------------------------------
     ; 0x20
     ; 64 bit data segment descriptor
     dw 0x0000           ; Segment limit low
@@ -125,7 +134,9 @@ gdt:
     db 0x92             ; Access byte data segment, read/write, present
     db 0x00             ; Long mode data segment has flag to zero
     db 0x00             ; Base address high
+    ;------------------------------------------------------------------------------------------
 
+    ;------------------------------------------------------------------------------------------
     ; 0x28
     ; 64-bit user code segment descriptor
     dw 0x0000           ; Segment limit low
@@ -134,7 +145,10 @@ gdt:
     db 0xFA             ; Access byte data segment, read/write, present, user mode
     db 0x20             ; Long mode data segment has flag to zero
     db 0x00             ; Base address high         ; 
+    ;------------------------------------------------------------------------------------------
 
+
+    ;------------------------------------------------------------------------------------------
     ; 0x30
     ; 64-bit user data segment
     dw 0x0000           ; Segment limit low
@@ -143,6 +157,32 @@ gdt:
     db 0xF2             ; Access byte data segment, read/write, present, user mode
     db 0x00             ; Long mode data segment has flag to zero
     db 0x00             ; Base address high
+    ;------------------------------------------------------------------------------------------
+
+    ;------------------------------------------------------------------------------------------
+    ; 0x38
+    ; TSS IS IN TWO ENTRIES FOR 64 BIT MODE
+
+    ; byte 0-7
+    ; 64-bit TSS Segment descriptor 1
+    ; NULL because it wil be initialized in the C code 
+    dw 0x0000           ; Segment limit low
+    dw 0x0000           ; Base address low
+    db 0x00             ; Base address middle
+    db 0x00             ; Access byte data segment, read/write, present, user mode
+    db 0x00             ; Long mode data segment has flag to zero
+    db 0x00             ; Base address high
+
+    ; byte 0-8
+    ; 64-bit TSS Segment descriptor 2
+    ; NULL because it wil be initialized in the C code 
+    dw 0x0000           ; Segment limit low
+    dw 0x0000           ; Base address low
+    db 0x00             ; Base address middle
+    db 0x00             ; Access byte data segment, read/write, present, user mode
+    db 0x00             ; Long mode data segment has flag to zero
+    db 0x00             ; Base address high
+    ;------------------------------------------------------------------------------------------
 
 gdt_end:
 
