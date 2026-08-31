@@ -8,18 +8,18 @@
 #include "memory/heap/kheap.h"
 #include "memory/paging/paging.h"
 // #include "disk/disk.h"
-// #include "fs/pparser.h"
+#include "fs/pparser.h"
 #include "string/string.h"
-// #include "disk/streamer.h"
+#include "disk/streamer.h"
 // #include "task/task.h"
-// #include "task/process.h"
+#include "task/process.h"
 #include "gdt/gdt.h"
 #include "task/tss.h"
-// #include "fs/file.h"
-// #include "idt/idt.h"
+#include "fs/file.h"
+#include "idt/idt.h"
 #include "status.h"
-// #include "isr80h/isr80h.h"
-// #include "keyboard/keyboard.h"
+#include "isr80h/isr80h.h"
+#include "keyboard/keyboard.h"
 #include "config.h"
 
 uint16_t *video_mem = 0;
@@ -212,7 +212,14 @@ void kernel_main()
     paging_switch(kernel_paging_desc);
     kheap_post_paging();
 
+    // enable interrupt descriptor table
     idt_init();
+
+    // enable fs functionality
+    fs_init();
+
+    // search and initialize the disk
+    disk_search_and_init();
 
     // Allocate a 1 MB stack for the kernel IDT
     size_t stack_size = 1024 * 1024;
@@ -230,7 +237,7 @@ void kernel_main()
     tss.rsp0 = (uint64_t)megabyte_stack_tss_end;
     tss.iopb_offset = sizeof(tss); // No I/O permissions are used
 
-    struct tss_desc_64 *tssdesc = (struct tss_desc_64 *)&gdt[KERNEL_LONG_MODE_CODE_GDT_INDEX];
+    struct tss_desc_64 *tssdesc = (struct tss_desc_64 *)&gdt[KERNEL_LONG_MODE_TSS_GDT_INDEX];
     gdt_set_tss(tssdesc, &tss, sizeof(tss) - 1, TSS_DESCRIPTOR_TYPE, 0x00);
 
     // data[0] = 'M';
@@ -255,12 +262,6 @@ void kernel_main()
     // print(itoa(avail));
     // print("\n");
 
-    // // Initialize the file systems
-    // fs_init();
-
-    // // search and initialize the disk
-    // disk_search_and_init();
-
     // // Initialize the interrupt descriptor table
     // idt_init();
 
@@ -269,8 +270,14 @@ void kernel_main()
     // tss.esp0 = 0x600000; // this is the kernel stack
     // tss.ss0 = KERNEL_DATA_SELECTOR;
 
-    // // Load the tss
-    // tss_load(0x28);
+    // Load the tss
+    tss_load(KERNEL_LONG_MODE_TSS_SELECTOR);
+
+    print("tss load was fine\n");
+
+    // register isr80h commands
+    isr80h_register_commands();
+    print("register isr80h\n");
 
     // // Setup paging
     // kernel_chunk = paging_new_4gb(PAGING_IS_WRITEABLE | PAGING_IS_PRESENT | PAGING_ACCESS_FROM_ALL);
@@ -281,11 +288,8 @@ void kernel_main()
     // // enable paging
     // enable_paging();
 
-    // // register the kernel commands
-    // isr80h_register_commands();
-
-    // // Initialize all the system keyboards
-    // keyboard_init();
+    // Initialize all the system keyboards
+    keyboard_init();
 
     // struct process *process = 0;
     // int res = process_load_switch("0:/blank.elf", &process);
