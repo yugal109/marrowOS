@@ -3,6 +3,7 @@
 #include "classic.h"
 #include "kernel.h"
 #include "idt/idt.h"
+#include "idt/irq.h"
 #include "task/task.h"
 #include <stddef.h>
 #include <stdint.h>
@@ -37,6 +38,10 @@ int classic_keyboard_init()
     idt_register_interrupt_callback(ISR_KEYBOARD_INTERRUPT, classic_keyboard_handle_interrupt);
 
     keyboard_set_capslock(&classic_keyboard, KEYBOARD_CAPS_LOCK_OFF);
+
+    // enable the keyboard on the PIC to allow keystroke interrupts
+    IRQ_enable(IRQ_KEYBOARD);
+
     outb(PS2_PORT, PS2_COMMAND_ENABLE_FIRST_PORT);
     return 0;
 };
