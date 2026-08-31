@@ -288,7 +288,7 @@ void kernel_main()
 
     print("loading program...\n");
     struct process *process = 0;
-    int res = process_load_switch("0:/simple.bin", &process);
+    int res = process_load_switch("0:/blank.elf", &process);
     if (res != MARROWOS_ALL_OK)
     {
         panic("Failed to load user program.\n");
@@ -303,7 +303,7 @@ void kernel_main()
 
     // process_inject_arguments(process, &argument);
 
-    // res = process_load_switch("0:/blank.elf", &process);
+    // int res = process_load_switch("0:/blank.elf", &process);
 
     // if (res != MARROWOS_ALL_OK)
     // {
