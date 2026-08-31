@@ -255,8 +255,8 @@ int task_init(struct task *task, struct process *process)
     task->registers.ip = MARROWOS_PROGRAM_VIRTUAL_ADDRESS;
     if (process->filetype == PROCESS_FILE_TYPE_ELF)
     {
-        panic("Elf files not supported\n");
-        // task->registers.ip = elf_header(process->elf_file)->e_entry;
+        // panic("Elf files not supported\n");
+        task->registers.ip = elf_header(process->elf_file)->e_entry;
     }
 
     task->registers.ss = USER_DATA_SEGMENT;
