@@ -122,11 +122,13 @@ int elf_process_phdr_pt_load(struct elf_file *elf_file, struct elf64_phdr *phdr)
         elf_file->physical_end_address = elf_memory(elf_file) + phdr->p_offset + phdr->p_filesz;
     }
 
+    // Zero this PHDR's BSS tail. Do not use physical_base_address: that is
+    // the lowest LOAD (.asm / _start) and a filesz=0 BSS phdr would wipe it.
     size_t filesize = phdr->p_filesz;
     size_t total_size = phdr->p_memsz;
-    if (total_size > filesize)
+    if (total_size > filesize && filesize > 0)
     {
-        memset((char *)elf_file->physical_base_address + filesize, 0, total_size - filesize);
+        memset((char *)elf_memory(elf_file) + phdr->p_offset + filesize, 0, total_size - filesize);
     }
     return 0;
 }

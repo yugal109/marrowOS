@@ -14,7 +14,8 @@ global marrowos_exit: function
 ; void print(const char* message)
 print:
     push qword rdi
-    mov rax,1; Command print
+    mov rax,1 ; Command print
+    int 0x80
     add rsp,8
     ret
 

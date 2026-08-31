@@ -232,7 +232,7 @@ void kernel_main()
 
     // setup the TSS
     memset(&tss, 0x00, sizeof(tss));
-    tss.rsp0 = (uint64_t)megabyte_stack_tss_end;
+    tss.rsp0 = (uint64_t)megabyte_stack_tss_begin;
     tss.iopb_offset = sizeof(tss); // No I/O permissions are used
 
     struct tss_desc_64 *tssdesc = (struct tss_desc_64 *)&gdt[KERNEL_LONG_MODE_TSS_GDT_INDEX];

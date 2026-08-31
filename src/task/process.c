@@ -440,7 +440,22 @@ static int process_map_elf(struct process *process)
     for (int i = 0; i < header->e_phnum; i++)
     {
         struct elf64_phdr *phdr = &phdrs[i];
+        if (phdr->p_type != PT_LOAD || phdr->p_memsz == 0)
+        {
+            continue;
+        }
+
         void *phdr_phys_address = elf_phdr_phys_address(elf_file, phdr);
+        if (phdr->p_filesz == 0)
+        {
+            phdr_phys_address = kzalloc(phdr->p_memsz);
+            if (!phdr_phys_address)
+            {
+                res = -ENOMEM;
+                break;
+            }
+        }
+
         int flags = PAGING_IS_PRESENT | PAGING_ACCESS_FROM_ALL;
         if (phdr->p_flags & PF_W)
         {
@@ -449,7 +464,7 @@ static int process_map_elf(struct process *process)
         res = paging_map_to(process->task->paging_desc,
                             paging_align_to_lower_page((void *)(uintptr_t)phdr->p_vaddr),
                             paging_align_to_lower_page(phdr_phys_address),
-                            paging_align_address(phdr_phys_address + phdr->p_memsz),
+                            paging_align_address((char *)phdr_phys_address + phdr->p_memsz),
                             flags);
         if (ISERR(res))
         {
