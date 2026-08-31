@@ -6,6 +6,8 @@
 #define KERNEL_DATA_SELECTOR 0x10
 #define KERNEL_LONG_MODE_CODE_SELECTOR 0x18
 
+#define TSS_DESCRIPTOR_TYPE 0x89 // 0x9 = 64-bit, bit 7 present
+
 // Where to find the E820 records
 #define MARROWOS_MEMORY_MAP_LOCATION 0x7e00
 
