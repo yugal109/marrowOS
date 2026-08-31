@@ -250,6 +250,8 @@ int task_init(struct task *task, struct process *process)
         return -EIO;
     }
 
+    paging_map_e820_memory_regions(task->paging_desc);
+
     task->registers.ip = MARROWOS_PROGRAM_VIRTUAL_ADDRESS;
     if (process->filetype == PROCESS_FILE_TYPE_ELF)
     {

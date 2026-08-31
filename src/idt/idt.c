@@ -65,7 +65,7 @@ void idt_set(int interrupt_no, void *address)
 
 void idt_handle_exception()
 {
-    panic(" Panic Exception \n");
+    panic("Panic Exception\n");
     // process_terminate(task_current()->process);
     // task_next();
 }

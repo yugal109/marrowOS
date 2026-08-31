@@ -172,9 +172,7 @@ struct paging_desc *kernel_desc()
 void kernel_main()
 {
     terminal_initialize();
-    print("Hello 64-bit!\n");
 
-    print("Total memory\n");
     print(itoa(e820_total_accessible_memory()));
     print("\n");
 
@@ -192,7 +190,7 @@ void kernel_main()
     data[1] = 'B';
     data[2] = 'C';
     data[3] = 0x00;
-    print(data);
+    // print(data);
 
     kernel_paging_desc = paging_desc_new(PAGING_MAP_LEVEL_4);
     if (!kernel_paging_desc)
@@ -273,11 +271,8 @@ void kernel_main()
     // Load the tss
     tss_load(KERNEL_LONG_MODE_TSS_SELECTOR);
 
-    print("tss load was fine\n");
-
     // register isr80h commands
     isr80h_register_commands();
-    print("register isr80h\n");
 
     // // Setup paging
     // kernel_chunk = paging_new_4gb(PAGING_IS_WRITEABLE | PAGING_IS_PRESENT | PAGING_ACCESS_FROM_ALL);
@@ -291,13 +286,16 @@ void kernel_main()
     // Initialize all the system keyboards
     keyboard_init();
 
-    // struct process *process = 0;
-    // int res = process_load_switch("0:/blank.elf", &process);
+    print("loading program...\n");
+    struct process *process = 0;
+    int res = process_load_switch("0:/simple.bin", &process);
+    if (res != MARROWOS_ALL_OK)
+    {
+        panic("Failed to load user program.\n");
+    }
 
-    // if (res != MARROWOS_ALL_OK)
-    // {
-    //     panic("Failed to load shell file.\n");
-    // }
+    // drop the user land
+    task_run_first_ever_task();
 
     // struct command_argument argument;
     // argument.next = 0x00;
@@ -316,8 +314,6 @@ void kernel_main()
     // argument.next = 0x00;
 
     // process_inject_arguments(process, &argument);
-
-    // task_run_first_ever_task();
 
     // enable the system interrupts
     // enable_interrupts();
