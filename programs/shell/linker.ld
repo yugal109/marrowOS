@@ -1,5 +1,5 @@
 ENTRY(_start)
-OUTPUT_FORMAT(elf32-i386)
+OUTPUT_FORMAT(elf64-x86-64)
 SECTIONS
 {
     /* start of user program virtual memory ? remember ?  */

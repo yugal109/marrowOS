@@ -13,6 +13,8 @@ all: directories ./bin/boot.bin ./bin/kernel.bin user_programs
 	# Initialize FAT16 (keep our boot sector). No user ELFs in lecture 7.
 	MTOOLS_SKIP_CHECK=1 mformat -i ./bin/os.bin -B ./bin/boot.bin -R 200 -c 128 -r 64 ::
 	MTOOLS_SKIP_CHECK=1 mcopy -i ./bin/os.bin -o ./programs/simple/build/simple.bin ::simple.bin
+	MTOOLS_SKIP_CHECK=1 mcopy -i ./bin/os.bin -o ./programs/blank/blank.elf ::blank.elf
+	MTOOLS_SKIP_CHECK=1 mcopy -i ./bin/os.bin -o ./programs/shell/shell.elf ::shell.elf
 
 
 directories:
@@ -131,15 +133,15 @@ directories:
 
 user_programs:
 	cd ./programs/simple && $(MAKE) all
-# 	cd ./programs/stdlib && $(MAKE) all
-# 	cd ./programs/blank && $(MAKE) all
-# 	cd ./programs/shell && $(MAKE) all
+	cd ./programs/stdlib && $(MAKE) all
+	cd ./programs/blank && $(MAKE) all
+	cd ./programs/shell && $(MAKE) all
 
 user_programs_clean:
-# 	cd ./programs/stdlib && $(MAKE) clean
-# 	cd ./programs/blank && $(MAKE) clean
-# 	cd ./programs/shell && $(MAKE) clean
 	cd ./programs/simple && $(MAKE) all
+	cd ./programs/stdlib && $(MAKE) clean
+	cd ./programs/blank && $(MAKE) clean
+	cd ./programs/shell && $(MAKE) clean
 
 clean: 
 	rm -rf ./bin/boot.bin ./bin/kernel.bin ./bin/os.bin

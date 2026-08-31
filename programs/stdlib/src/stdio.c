@@ -128,7 +128,7 @@ int printf(const char *fmt, ...)
             break;
         case 'p':
             print("0x");
-            print_uint((unsigned int)va_arg(ap, void *), 16, 0);
+            print_ull((unsigned long long)va_arg(ap, void *), 16, 0);
             break;
         case '%':
             putchar('%');

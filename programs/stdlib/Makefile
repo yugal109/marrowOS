@@ -4,34 +4,34 @@ FLAGS= -g -falign-jumps -falign-functions -falign-labels -falign-loops -fstrengt
 
 
 all: ${FILES}
-	i686-elf-ld -m elf_i386  -relocatable ${FILES} -o ./stdlib.elf
+	x86_64-elf-ld -m elf_x86_64  -relocatable ${FILES} -o ./stdlib.elf
 
 ./build/start.asm.o: ./src/start.asm
-	nasm -f elf ./src/start.asm -o ./build/start.asm.o
+	nasm -f elf64 ./src/start.asm -o ./build/start.asm.o
 
 ./build/marrowos.asm.o: ./src/marrowos.asm
-	nasm -f elf ./src/marrowos.asm -o ./build/marrowos.asm.o
+	nasm -f elf64 ./src/marrowos.asm -o ./build/marrowos.asm.o
 
 ./build/marrowos.o: ./src/marrowos.c
-	i686-elf-gcc ${INCLUDES} $(FLAGS) -std=gnu99 -c ./src/marrowos.c -o ./build/marrowos.o
+	x86_64-elf-gcc ${INCLUDES} $(FLAGS) -std=gnu99 -c ./src/marrowos.c -o ./build/marrowos.o
 
 
 ./build/stdlib.o: ./src/stdlib.c
-	i686-elf-gcc ${INCLUDES} $(FLAGS) -std=gnu99 -c ./src/stdlib.c -o ./build/stdlib.o
+	x86_64-elf-gcc ${INCLUDES} $(FLAGS) -std=gnu99 -c ./src/stdlib.c -o ./build/stdlib.o
 
 
 ./build/stdio.o: ./src/stdio.c
-	i686-elf-gcc ${INCLUDES} $(FLAGS) -std=gnu99 -c ./src/stdio.c -o ./build/stdio.o
+	x86_64-elf-gcc ${INCLUDES} $(FLAGS) -std=gnu99 -c ./src/stdio.c -o ./build/stdio.o
 
 ./build/string.o: ./src/string.c
-	i686-elf-gcc ${INCLUDES} $(FLAGS) -std=gnu99 -c ./src/string.c -o ./build/string.o
+	x86_64-elf-gcc ${INCLUDES} $(FLAGS) -std=gnu99 -c ./src/string.c -o ./build/string.o
 
 
 ./build/memory.o: ./src/memory.c
-	i686-elf-gcc ${INCLUDES} $(FLAGS) -std=gnu99 -c ./src/memory.c -o ./build/memory.o
+	x86_64-elf-gcc ${INCLUDES} $(FLAGS) -std=gnu99 -c ./src/memory.c -o ./build/memory.o
 
 ./build/start.o: ./src/start.c
-	i686-elf-gcc ${INCLUDES} $(FLAGS) -std=gnu99 -c ./src/start.c -o ./build/start.o
+	x86_64-elf-gcc ${INCLUDES} $(FLAGS) -std=gnu99 -c ./src/start.c -o ./build/start.o
 
 
 clean:
