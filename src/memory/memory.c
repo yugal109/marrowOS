@@ -1,7 +1,7 @@
 #include "memory.h"
 #include "config.h"
 
-// Count of E820 entries the bootloader stored at 0x7DFE.
+// Count of E820 entries the bootloader stored at 0x210000.
 size_t e820_total_entries()
 {
     return *((uint16_t *)MARROWOS_MEMORY_MAP_TOTAL_ENTRIES_LOCATION);

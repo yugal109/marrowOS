@@ -8,13 +8,15 @@ FLAGS = -g -ffreestanding -falign-jumps -falign-functions -falign-labels -falign
 all: directories ./bin/boot.bin ./bin/kernel.bin user_programs
 	rm -rf ./bin/os.bin
 	dd if=./bin/boot.bin >> ./bin/os.bin
-	dd if=./bin/kernel.bin >> ./bin/os.bin
-	dd if=/dev/zero bs=1048576 count=16 >> ./bin/os.bin
-	# Initialize FAT16 (keep our boot sector). No user ELFs in lecture 7.
-	MTOOLS_SKIP_CHECK=1 mformat -i ./bin/os.bin -B ./bin/boot.bin -R 200 -c 128 -r 64 ::
-	MTOOLS_SKIP_CHECK=1 mcopy -i ./bin/os.bin -o ./programs/simple/build/simple.bin ::simple.bin
-	MTOOLS_SKIP_CHECK=1 mcopy -i ./bin/os.bin -o ./programs/blank/blank.elf ::blank.elf
-	MTOOLS_SKIP_CHECK=1 mcopy -i ./bin/os.bin -o ./programs/shell/shell.elf ::shell.elf
+	@test -f ./bin/uefi.img || (echo "missing bin/uefi.img (pack BOOTX64.EFI first)" && exit 1)
+	MTOOLS_SKIP_CHECK=1 mcopy -i ./bin/uefi.img -o ./bin/kernel.bin ::kernel.bin
+	MTOOLS_SKIP_CHECK=1 mcopy -i ./bin/uefi.img -o ./programs/simple/build/simple.bin ::simple.bin
+	MTOOLS_SKIP_CHECK=1 mcopy -i ./bin/uefi.img -o ./programs/blank/blank.elf ::blank.elf
+	MTOOLS_SKIP_CHECK=1 mcopy -i ./bin/uefi.img -o ./programs/shell/shell.elf ::shell.elf
+	MTOOLS_SKIP_CHECK=1 mcopy -i ./bin/uefi.img -o ./bin/kernel.bin ::kernel.bin
+	MTOOLS_SKIP_CHECK=1 mcopy -i ./bin/uefi.img -o ./programs/simple/build/simple.bin ::simple.bin
+	MTOOLS_SKIP_CHECK=1 mcopy -i ./bin/uefi.img -o ./programs/blank/blank.elf ::blank.elf
+	MTOOLS_SKIP_CHECK=1 mcopy -i ./bin/uefi.img -o ./programs/shell/shell.elf ::shell.elf
 
 
 directories:
