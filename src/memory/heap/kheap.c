@@ -35,6 +35,11 @@ void kheap_post_paging()
     multiheap_ready(kernel_multiheap);
 }
 
+void *krealloc(void *old_ptr, size_t new_size)
+{
+    return multiheap_realloc(kernel_multiheap, old_ptr, new_size);
+}
+
 // Bootstrap: minimal heap from largest E820 region, then multiheap chain of remaining type=1 regions.
 // Does NOT call multiheap_ready — paging is not live yet.
 void kheap_init()

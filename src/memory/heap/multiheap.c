@@ -145,6 +145,29 @@ void multiheap_get_heap_and_paging_heap_for_address(struct multiheap *multiheap,
     *real_phys_addr = real_addr;
 }
 
+void *multiheap_realloc(struct multiheap *multiheap, void *old_ptr, size_t new_size)
+{
+    struct multiheap_single_heap *paging_heap = NULL;
+    struct multiheap_single_heap *phys_heap = NULL;
+    struct multiheap_single_heap *heap_to_use = NULL;
+    void *real_phys_addr = NULL;
+    multiheap_get_heap_and_paging_heap_for_address(multiheap, old_ptr, &phys_heap, &paging_heap, &real_phys_addr);
+
+    if (paging_heap)
+    {
+        panic("Reallocation not yet supported for virtual addresses whose address differs from physical address\n");
+    }
+
+    heap_to_use = phys_heap;
+    if (!heap_to_use)
+    {
+        // Heap is NULL create a new allocation
+        return multiheap_alloc(multiheap, new_size);
+    }
+
+    return heap_realloc(heap_to_use->heap, old_ptr, new_size);
+}
+
 // How many 4KB blocks this allocation occupies. For a virtual ptr we count
 // on the paging heap (contiguous virtual slots); that is how many phys pages to free.
 size_t multiheap_allocation_block_count(struct multiheap *multiheap, void *ptr)

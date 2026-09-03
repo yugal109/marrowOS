@@ -2,6 +2,7 @@
 #define FILE_H
 #include "pparser.h"
 #include <stdint.h>
+#include <stddef.h>
 
 typedef unsigned int FILE_SEEK_MODE;
 enum
@@ -35,6 +36,7 @@ typedef int (*FS_READ_FUNCTION)(struct disk *disk, void *private, uint32_t size,
 typedef int (*FS_RESOLVE_FUNCTION)(struct disk *disk);
 typedef int (*FS_SEEK_FUNCTION)(void *private, uint32_t offset, FILE_SEEK_MODE seek_mode);
 typedef int (*FS_CLOSE_FUNCTION)(void *private);
+typedef int (*FS_VOLUME_NAME_FUNCTION)(void *private, char *name_out, size_t max);
 
 struct file_stat
 {
@@ -53,6 +55,7 @@ struct filesystem
     FS_SEEK_FUNCTION seek;
     FS_STAT_FUNCTION stat;
     FS_CLOSE_FUNCTION close;
+    FS_VOLUME_NAME_FUNCTION volume_name;
 
     char name[20];
 };

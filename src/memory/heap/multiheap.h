@@ -14,8 +14,8 @@ enum
 // One node in the multiheap chain: one physical E820 heap + optional virtual shadow.
 struct multiheap_single_heap
 {
-    struct heap *heap;         // physical heap (real RAM, identity mapped)
-    struct heap *paging_heap;  // virtual shadow above max_end_data_addr (NULL if no DEFRAG flag)
+    struct heap *heap;        // physical heap (real RAM, identity mapped)
+    struct heap *paging_heap; // virtual shadow above max_end_data_addr (NULL if no DEFRAG flag)
     int flags;
     struct multiheap_single_heap *next;
 };
@@ -94,5 +94,7 @@ size_t multiheap_allocation_block_count(struct multiheap *multiheap, void *ptr);
 
 // Same as block_count, in bytes (blocks * 4096).
 size_t multiheap_allocation_byte_count(struct multiheap *multiheap, void *ptr);
+
+void *multiheap_realloc(struct multiheap *multiheap, void *old_ptr, size_t new_size);
 
 #endif

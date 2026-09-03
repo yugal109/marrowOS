@@ -3,8 +3,19 @@
 #include "memory/memory.h"
 #include "status.h"
 #include "config.h"
+#include "memory/heap/kheap.h"
+#include "string/string.h"
+#include "lib/vector/vector.h"
 
-struct disk disk;
+struct vector *disk_vector = NULL;
+
+// a pointer to the primary hard disk
+// allowing IO directly to the disk from LBA zero onwards
+struct disk *disk = NULL;
+
+// a pointer to the virtual disk that contains the primary kernel filesystem
+// where kernel files are found
+struct disk *primary_fs_disk = NULL;
 
 int disk_read_sector(int lba, int total, void *buf)
 {
@@ -12,24 +23,28 @@ int disk_read_sector(int lba, int total, void *buf)
     // total = how many sectors to read
     // buf   = where in RAM to put the data we read
 
-    outb(0x1F6, (lba >> 24) | 0xE0);
-    // Select the PRIMARY MASTER drive, and send the highest 4 bits of the LBA address.
-    // 0xE0 = the bit pattern meaning "master drive, LBA mode".
-    // (lba >> 24) shifts the LBA right by 24 bits, leaving just its top 4 bits,
-    // which get OR'd into this same byte alongside the drive-select bits.
+    // wait for the disk not to be busy
+    while (insb(0x1F7) & 0x80)
+    {
+        // spin
+    }
 
-    outb(0x1F2, total);
-    // Tell the drive how many sectors we want to read in total.
+    // Select drive: bits 7..4=0xE, bits 3..0 = high nibble of lba
+    outb(0x1F6, 0xE0 | ((lba >> 24) & 0x0F));
+
+    // Sector count
+    outb(0x1F2, (unsigned char)total);
+    // LBA low, mid, high
 
     outb(0x1F3, (unsigned char)(lba & 0xff));
     // Send the LOWEST 8 bits of the LBA address.
     // (lba & 0xff) masks out everything except the bottom byte.
 
-    outb(0x1F4, (unsigned char)(lba >> 8));
+    outb(0x1F4, (unsigned char)((lba >> 8) & 0xff));
     // Send the NEXT 8 bits of the LBA address (bits 8-15).
     // Shift right by 8, so those bits become the new lowest byte, then send that byte.
 
-    outb(0x1F5, (unsigned char)(lba >> 16));
+    outb(0x1F5, (unsigned char)((lba >> 16) & 0xff));
     // Send the NEXT 8 bits of the LBA address (bits 16-23).
     // Same idea, shifted further.
     // (Combined with the 4 bits sent earlier via 0x1F6, that's a full 28-bit LBA address.)
@@ -46,71 +61,132 @@ int disk_read_sector(int lba, int total, void *buf)
 
     for (int b = 0; b < total; b++)
     {
-        // Outer loop: repeat this whole process once for EACH sector we asked for.
-        // b counts which sector (of the "total" requested) we're currently on.
+        // Wait for the disk not to be busy
+        while (insb(0x1F7) & 0x80)
+        {
+            // spin
+        }
+
+        // Check error bit
+        char status = insb(0x1F7);
+        if (status & 0x01)
+        {
+            return -EIO;
+        }
 
         // Wait for the buffer to be ready
-        char c = insb(0x1F7);
-        // Read the current STATUS byte from the drive (port 0x1F7 doubles as
-        // both command port [when writing] and status port [when reading]).
-
-        while (!(c & 0x08))
+        while (!(insb(0x1F7) & 0x08))
         {
-            c = insb(0x1F7);
+            // spin
         }
-        // Keep re-reading the status byte in a loop, doing NOTHING else,
-        // until bit 3 (0x08) turns on. Bit 3 = "DRQ" = "data is ready for you
-        // to read now". This is the "busy-wait / polling" loop — the CPU just
-        // spins here, repeatedly checking, until the drive signals it's ready.
 
-        // Copy from harddisk to memory
-        for (int i = 0; i < 256; i++)
+        // Copy from hard disk to memory
+        for (int word = 0; word < 256; word++)
         {
-            // Inner loop: read exactly 256 WORDS (256 x 2 bytes = 512 bytes
-            // = exactly one full sector) from the drive's data port.
-
-            *ptr = insw(0x1F0);
-            // Read ONE word (2 bytes) from the drive's DATA port (0x1F0),
-            // and store it at wherever "ptr" currently points, inside our buffer.
-
-            ptr++;
-            // Move ptr forward by one "unsigned short" (2 bytes), so the
-            // NEXT word we read lands in the next slot of the buffer,
-            // not overwriting the one we just wrote.
+            *ptr++ = insw(0x1F0);
         }
-        // After this inner loop finishes, we've fully copied ONE sector's
-        // worth of data (512 bytes) into our buffer. The outer loop then
-        // goes back and repeats the whole "wait, then read 256 words" process
-        // for the NEXT sector, until all "total" sectors have been read.
     }
 
     return 0;
     // Signal success back to whoever called this function.
 }
 
+int disk_create_new(int type, int starting_lba, int ending_lba, size_t sector_size, struct disk **disk_out)
+{
+    int res = 0;
+    struct disk *disk = kzalloc(sizeof(struct disk));
+    if (!disk)
+    {
+        res = -ENOMEM;
+        goto out;
+    }
+    disk->type = type;
+    disk->id = vector_count(disk_vector);
+    disk->sector_size = sector_size;
+    disk->starting_lba = starting_lba;
+    disk->ending_lba = ending_lba;
+
+    // Not all disks have filesystems its not an error not to have one
+    disk->filesystem = fs_resolve(disk);
+    if (disk->filesystem)
+    {
+        char fs_name[11] = {0};
+        char primary_drive_fs_name[11] = {0};
+        strncpy(primary_drive_fs_name, MARROWOS_KERNEL_FILESYSTEM_NAME, strlen(MARROWOS_KERNEL_FILESYSTEM_NAME));
+        // Is the disk the primary disk, lets check
+        disk->filesystem->volume_name(disk->fs_private, fs_name, sizeof(fs_name));
+        if (strncmp(fs_name, primary_drive_fs_name, sizeof(fs_name)) == 0)
+        {
+            // Set the primary filesystem disk
+            primary_fs_disk = disk;
+        }
+    }
+
+    if (disk_out)
+    {
+        *disk_out = disk;
+    }
+    vector_push(disk_vector, &disk);
+out:
+    return res;
+}
 void disk_search_and_init()
 {
-    memset(&disk, 0, sizeof(disk));
-    disk.type = MARROWOS_DISK_TYPE_REAL;
-    disk.sector_size = MARROWOS_SECTOR_SIZE;
-    disk.filesystem = fs_resolve(&disk);
-    disk.id = 0;
+    int res = 0;
+    disk_vector = vector_new(sizeof(struct disk *), 4, 0);
+    if (!disk_vector)
+    {
+        res = -ENOMEM;
+        goto out;
+    }
+
+    res = disk_create_new(MARROWOS_DISK_TYPE_REAL, 0, 0, MARROWOS_SECTOR_SIZE, &disk);
+    if (res < 0)
+    {
+        goto out;
+    }
+out:
+    return;
+}
+
+struct disk *disk_primary()
+{
+    return disk;
+}
+
+struct disk *disk_primary_fs_disk()
+{
+    return primary_fs_disk;
 }
 
 struct disk *disk_get(int index)
 {
-    if (index != 0)
+    size_t total_disks = vector_count(disk_vector);
+    ;
+    if (index >= (int)total_disks)
     {
-        return 0;
+        // out of bounds no such disk is loaded
+        return NULL;
     }
-    return &disk;
+
+    struct disk *disk = NULL;
+    vector_at(disk_vector, index, &disk, sizeof(disk));
+    return disk;
 }
 
 int disk_read_block(struct disk *idisk, unsigned int lba, int total, void *buf)
 {
-    if (idisk != &disk)
+    size_t absolute_starting_lba = idisk->starting_lba + lba;
+    size_t absolute_ending_lba = absolute_starting_lba + total;
+    if (absolute_ending_lba > idisk->ending_lba)
     {
-        return -EIO;
+        // Is this the primary disk ?
+        if (idisk->starting_lba != 0 && idisk->ending_lba != 0)
+        {
+            // Out of bounds , you cannot read over to other virtual disks
+            return -EIO;
+        }
     }
-    return disk_read_sector(lba, total, buf);
+
+    return disk_read_sector(absolute_starting_lba, total, buf);
 }

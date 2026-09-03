@@ -65,4 +65,8 @@ size_t heap_allocation_block_count(struct heap *heap, void *starting_address);
 // Convert a data-pool address to its block-table index: (addr - saddr) / 4096.
 int64_t heap_address_to_block(struct heap *heap, void *address);
 
+bool heap_is_block_range_free(struct heap *heap, size_t starting_block, size_t ending_block);
+
+void *heap_realloc(struct heap *heap, void *old_ptr, size_t new_size);
+
 #endif
