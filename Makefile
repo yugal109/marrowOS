@@ -1,6 +1,6 @@
 # FILES = ./build/kernel.asm.o ./build/kernel.o ./build/disk/disk.o ./build/idt/idt.asm.o ./build/memory/memory.o ./build/idt/idt.o ./build/keyboard/keyboard.o ./build/keyboard/classic.o ./build/isr80h/isr80h.o ./build/isr80h/process.o ./build/isr80h/heap.o ./build/isr80h/misc.o ./build/isr80h/io.o ./build/task/task.o ./build/task/task.asm.o ./build/task/process.o ./build/loader/formats/elf.o ./build/loader/formats/elfloader.o ./build/io/io.asm.o ./build/gdt/gdt.asm.o ./build/gdt/gdt.o ./build/task/tss.asm.o ./build/memory/heap/heap.o ./build/memory/heap/kheap.o ./build/fs/pparser.o ./build/fs/file.o ./build/fs/fat/fat16.o ./build/string/string.o ./build/disk/streamer.o ./build/memory/paging/paging.o ./build/memory/paging/paging.asm.o
 #FILES = ./build/kernel.asm.o ./build/kernel.o ./build/loader/formats/elf.o ./build/loader/formats/elfloader.o  ./build/isr80h/isr80h.o ./build/isr80h/process.o ./build/isr80h/heap.o ./build/keyboard/keyboard.o ./build/keyboard/classic.o ./build/isr80h/io.o ./build/isr80h/misc.o ./build/disk/disk.o ./build/disk/streamer.o ./build/task/process.o ./build/task/task.o ./build/task/task.asm.o ./build/task/tss.asm.o ./build/fs/pparser.o ./build/fs/file.o ./build/fs/fat/fat16.o ./build/string/string.o ./build/idt/idt.asm.o ./build/idt/idt.o ./build/memory/memory.o ./build/io/io.asm.o ./build/gdt/gdt.o ./build/gdt/gdt.asm.o ./build/memory/heap/heap.o ./build/memory/heap/kheap.o ./build/memory/paging/paging.o ./build/memory/paging/paging.asm.o
-FILES = ./build/kernel.asm.o ./build/kernel.o ./build/lib/vector/vector.o ./build/disk/gpt.o ./build/loader/formats/elf.o ./build/idt/irq.o ./build/loader/formats/elfloader.o ./build/isr80h/isr80h.o ./build/isr80h/heap.o ./build/isr80h/io.o ./build/isr80h/misc.o ./build/isr80h/process.o ./build/keyboard/keyboard.o ./build/keyboard/classic.o ./build/disk/disk.o ./build/disk/streamer.o ./build/fs/fat/fat16.o ./build/gdt/gdt.o ./build/fs/file.o ./build/fs/pparser.o ./build/memory/heap/multiheap.o ./build/task/process.o ./build/task/task.o ./build/string/string.o ./build/memory/paging/paging.o ./build/idt/idt.o ./build/idt/idt.asm.o ./build/task/task.asm.o ./build/task/tss.asm.o  ./build/memory/paging/paging.asm.o ./build/io/io.asm.o ./build/memory/heap/heap.o ./build/memory/heap/kheap.o ./build/memory/memory.o
+FILES = ./build/kernel.asm.o ./build/kernel.o ./build/lib/vector/vector.o ./build/disk/gpt.o ./build/loader/formats/elf.o ./build/idt/irq.o ./build/graphics/graphics.o ./build/loader/formats/elfloader.o ./build/isr80h/isr80h.o ./build/isr80h/heap.o ./build/isr80h/io.o ./build/isr80h/misc.o ./build/isr80h/process.o ./build/keyboard/keyboard.o ./build/keyboard/classic.o ./build/disk/disk.o ./build/disk/streamer.o ./build/fs/fat/fat16.o ./build/gdt/gdt.o ./build/fs/file.o ./build/fs/pparser.o ./build/memory/heap/multiheap.o ./build/task/process.o ./build/task/task.o ./build/string/string.o ./build/memory/paging/paging.o ./build/idt/idt.o ./build/idt/idt.asm.o ./build/task/task.asm.o ./build/task/tss.asm.o  ./build/memory/paging/paging.asm.o ./build/io/io.asm.o ./build/memory/heap/heap.o ./build/memory/heap/kheap.o ./build/memory/memory.o
 $(FILES): | directories
 INCLUDES = -I./src
 FLAGS = -g -ffreestanding -falign-jumps -falign-functions -falign-labels -falign-loops -fstrength-reduce -fomit-frame-pointer -finline-functions -Wno-unused-function -fno-builtin -Werror -Wno-unused-label -Wno-cpp -Wno-unused-parameter -nostdlib -nostartfiles -nodefaultlibs -Wall -O0 -Iinc
@@ -16,7 +16,7 @@ all: directories ./bin/boot.bin ./bin/kernel.bin user_programs
 
 
 directories:
-	mkdir -p ./bin ./build/string ./build/disk ./build/lib/vector ./build/isr80h ./build/keyboard ./build/loader/formats ./build/task ./build/gdt ./build/fs ./build/fs/fat ./build/memory ./build/memory/heap ./build/io ./build/memory/paging ./build/idt
+	mkdir -p ./bin ./build/string ./build/disk ./build/graphics ./build/lib/vector ./build/isr80h ./build/keyboard ./build/loader/formats ./build/task ./build/gdt ./build/fs ./build/fs/fat ./build/memory ./build/memory/heap ./build/io ./build/memory/paging ./build/idt
 
 
 ./bin/kernel.bin: directories $(FILES)
@@ -31,6 +31,9 @@ directories:
 
 ./build/kernel.o: ./src/kernel.c
 	x86_64-elf-gcc $(INCLUDES) $(FLAGS) -std=gnu99 -c ./src/kernel.c -o ./build/kernel.o
+
+./build/graphics/graphics.o: ./src/graphics/graphics.c
+	x86_64-elf-gcc $(INCLUDES) $(FLAGS) -std=gnu99 -c ./src/graphics/graphics.c -o ./build/graphics/graphics.o
 
 ./build/idt/idt.asm.o: ./src/idt/idt.asm
 	nasm -f elf64 -g ./src/idt/idt.asm -o ./build/idt/idt.asm.o

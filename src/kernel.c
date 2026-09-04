@@ -8,6 +8,7 @@
 #include "memory/heap/kheap.h"
 #include "memory/paging/paging.h"
 // #include "disk/disk.h"
+#include "graphics/graphics.h"
 #include "fs/pparser.h"
 #include "string/string.h"
 #include "disk/streamer.h"
@@ -170,6 +171,8 @@ struct paging_desc *kernel_desc()
     return kernel_paging_desc;
 }
 
+// defined in kernel.asm
+extern struct graphics_info default_graphics_info;
 void kernel_main()
 {
     terminal_initialize();
@@ -210,6 +213,20 @@ void kernel_main()
 
     paging_switch(kernel_paging_desc);
     kheap_post_paging();
+
+    // setup the graphics
+    graphics_setup(&default_graphics_info);
+    struct framebuffer_pixel pixel = {0};
+    pixel.red = 0xff;
+    for (int x = 0; x < 100; x++)
+    {
+        for (int y = 0; y < 100; y++)
+        {
+            graphics_draw_pixel(graphics_screen_info(), x, y, pixel);
+        }
+    }
+
+    graphics_redraw_all();
 
     // enable interrupt descriptor table
     idt_init();
