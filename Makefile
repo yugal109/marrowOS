@@ -13,6 +13,7 @@ all: directories ./bin/boot.bin ./bin/kernel.bin user_programs
 	MTOOLS_SKIP_CHECK=1 mcopy -i ./bin/uefi.img -o ./programs/simple/build/simple.bin ::simple.bin
 	MTOOLS_SKIP_CHECK=1 mcopy -i ./bin/uefi.img -o ./programs/blank/blank.elf ::blank.elf
 	MTOOLS_SKIP_CHECK=1 mcopy -i ./bin/uefi.img -o ./programs/shell/shell.elf ::shell.elf
+	MTOOLS_SKIP_CHECK=1 mcopy -i ./bin/uefi.img -o ./data/images/bkground.bmp ::bkground.bmp
 
 
 directories:

@@ -1,4 +1,5 @@
 #include "graphics/image/image.h"
+#include "graphics/image/bmp.h"
 #include "graphics/graphics.h"
 #include "memory/memory.h"
 #include "fs/file.h"
@@ -9,6 +10,8 @@
 #include "memory/heap/kheap.h"
 
 struct vector *image_formats;
+
+int graphics_image_formats_load();
 
 struct image_format *graphics_image_format_get(const char *mime_type)
 {
@@ -121,6 +124,8 @@ out:
             img = NULL;
         }
     }
+
+    return img;
 }
 
 void graphics_image_free(struct image *image)

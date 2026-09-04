@@ -31,7 +31,7 @@ struct image
 
     // a pointer to the format that loaded this image
     struct image_format *format;
-}
+};
 
 typedef struct image *(*image_load_function)(void *memory, size_t size);
 typedef void (*image_free_function)(struct image *image);
@@ -52,7 +52,7 @@ struct image_format
     void *private;
 };
 
-int graphics_image_formats_load();
+int graphics_image_formats_init();
 void graphics_image_format_unload(struct image_format *format);
 void graphics_image_formats_unload();
 void graphics_image_free(struct image *image);

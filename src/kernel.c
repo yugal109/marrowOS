@@ -12,6 +12,7 @@
 #include "fs/pparser.h"
 #include "string/string.h"
 #include "disk/streamer.h"
+#include "graphics/image/image.h"
 // #include "task/task.h"
 #include "disk/gpt.h"
 #include "task/process.h"
@@ -216,17 +217,6 @@ void kernel_main()
 
     // setup the graphics
     graphics_setup(&default_graphics_info);
-    struct framebuffer_pixel pixel = {0};
-    pixel.red = 0xff;
-    for (int x = 0; x < 100; x++)
-    {
-        for (int y = 0; y < 100; y++)
-        {
-            graphics_draw_pixel(graphics_screen_info(), x, y, pixel);
-        }
-    }
-
-    graphics_redraw_all();
 
     // enable interrupt descriptor table
     idt_init();
@@ -306,6 +296,10 @@ void kernel_main()
 
     // Initialize all the system keyboards
     keyboard_init();
+
+    struct image *img = graphics_image_load("@:/bkground.bmp");
+    graphics_draw_image(NULL, img, 0, 0);
+    graphics_redraw_all();
 
     print("loading program...\n");
     struct process *process = 0;

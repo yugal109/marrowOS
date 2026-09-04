@@ -5,6 +5,7 @@
 #include <stdbool.h>
 
 #include "lib/vector/vector.h"
+#include "graphics/image/image.h"
 
 enum
 {
@@ -88,5 +89,6 @@ void graphics_draw_pixel(struct graphics_info *graphics_info, uint32_t x, uint32
 struct graphics_info *graphics_screen_info();
 void graphics_setup(struct graphics_info *main_graphics_info);
 void graphics_redraw_all();
+void graphics_draw_image(struct graphics_info *graphics_info, struct image *image, int x, int y);
 
 #endif
