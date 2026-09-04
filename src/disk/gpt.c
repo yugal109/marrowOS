@@ -3,7 +3,6 @@
 #include "status.h"
 #include "memory/memory.h"
 #include "disk/streamer.h"
-#include "kernel.h"
 
 struct disk *gpt_primary_disk = NULL;
 
@@ -15,13 +14,15 @@ size_t gpt_partition_table_header_real_size(struct gpt_partition_table_header *h
 int gpt_partition_table_header_read(struct gpt_partition_table_header *header_out)
 {
     int res = 0;
-    char sector[gpt_primary_disk->sector_size];
+    /* MAC-QEMU-FIX: fixed 512 buffer + offsetof copy — VLA/sizeof(flexible) is unsafe here */
+    char sector[512];
     res = disk_read_block(gpt_primary_disk, GPT_PARTITION_TABLE_HEADER_LBA, 1, sector);
     if (res < 0)
     {
         goto out;
     }
-    memcpy(header_out, sector, sizeof(*header_out));
+    memcpy(header_out, sector, offsetof(struct gpt_partition_table_header, reserved2));
+    /* MAC-QEMU-FIX-END */
 out:
     return res;
 }
@@ -48,9 +49,10 @@ int gpt_mount_partitions(struct gpt_partition_table_header *partition_header)
 
     for (size_t i = 0; i < total_entries; i++)
     {
-        // read a single partition entry
-        char buffer[entry_size];
-        res = disk_streamer_read(streamer, buffer, sizeof(buffer));
+        /* MAC-QEMU-FIX: fixed-size entry buffer — VLA of entry_size can misalign / blow stack */
+        char buffer[sizeof(struct gpt_partition_entry)];
+        res = disk_streamer_read(streamer, buffer, (int)entry_size);
+        /* MAC-QEMU-FIX-END */
         if (res < 0)
         {
             goto out;
@@ -80,7 +82,12 @@ out:
 int gpt_init()
 {
     int res = 0;
-    struct gpt_partition_table_header partition_header = {0};
+    /* MAC-QEMU-FIX: avoid "= {0}" — GCC movaps #GP if RSP not 16-byte aligned (green forever) */
+    char hdr_buf[96];
+    struct gpt_partition_table_header *partition_header = (struct gpt_partition_table_header *)hdr_buf;
+    memset(hdr_buf, 0, sizeof(hdr_buf));
+    /* MAC-QEMU-FIX-END */
+
     gpt_primary_disk = disk_get(0);
 
     if (!gpt_primary_disk)
@@ -89,13 +96,13 @@ int gpt_init()
         goto out;
     }
 
-    res = gpt_partition_table_header_read(&partition_header);
+    res = gpt_partition_table_header_read(partition_header);
     if (res < 0)
     {
         goto out;
     }
 
-    if (memcmp(partition_header.signature, GPT_SIGNATURE, sizeof(partition_header.signature)) != 0)
+    if (memcmp(partition_header->signature, GPT_SIGNATURE, sizeof(partition_header->signature)) != 0)
     {
         // Not a gpt formatted disk
         res = -EINFORMAT;
@@ -104,7 +111,7 @@ int gpt_init()
 
     // This is a GPT disk mount all partitions as separate
     // virtual disks
-    res = gpt_mount_partitions(&partition_header);
+    res = gpt_mount_partitions(partition_header);
     if (res < 0)
     {
         goto out;

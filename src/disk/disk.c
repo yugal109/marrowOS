@@ -177,16 +177,16 @@ struct disk *disk_get(int index)
 int disk_read_block(struct disk *idisk, unsigned int lba, int total, void *buf)
 {
     size_t absolute_starting_lba = idisk->starting_lba + lba;
-    size_t absolute_ending_lba = absolute_starting_lba + total;
-    if (absolute_ending_lba > idisk->ending_lba)
+    /* MAC-QEMU-FIX: GPT ending_lba is inclusive; ending_lba 0 = unbounded whole disk */
+    if (idisk->ending_lba != 0)
     {
-        // Is this the primary disk ?
-        if (idisk->starting_lba != 0 && idisk->ending_lba != 0)
+        size_t absolute_last_lba = absolute_starting_lba + (size_t)total - 1;
+        if (absolute_last_lba > idisk->ending_lba)
         {
-            // Out of bounds , you cannot read over to other virtual disks
             return -EIO;
         }
     }
+    /* MAC-QEMU-FIX-END */
 
     return disk_read_sector(absolute_starting_lba, total, buf);
 }

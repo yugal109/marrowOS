@@ -163,6 +163,39 @@ void graphics_draw_image(struct graphics_info *graphics_info, struct image *imag
     }
 }
 
+/* MAC-QEMU-FIX: scale BMP to GOP size — Linux+QEMU draws 1:1; our bkground is 768x432 on 1280x800 */
+void graphics_draw_image_scaled(struct graphics_info *graphics_info, struct image *image,
+                                int x, int y, int dst_w, int dst_h)
+{
+    if (!image || dst_w <= 0 || dst_h <= 0)
+    {
+        return;
+    }
+
+    if (!graphics_info)
+    {
+        graphics_info = loaded_graphics_info;
+    }
+
+    for (int dy = 0; dy < dst_h; dy++)
+    {
+        int sy = (dy * (int)image->height) / dst_h;
+        for (int dx = 0; dx < dst_w; dx++)
+        {
+            int sx = (dx * (int)image->width) / dst_w;
+            image_pixel_data pixel_data = graphics_image_get_pixel(image, sx, sy);
+
+            struct framebuffer_pixel fb_pixel = {0};
+            fb_pixel.red = pixel_data.R;
+            fb_pixel.green = pixel_data.G;
+            fb_pixel.blue = pixel_data.B;
+
+            graphics_draw_pixel(graphics_info, (uint32_t)(x + dx), (uint32_t)(y + dy), fb_pixel);
+        }
+    }
+}
+/* MAC-QEMU-FIX-END */
+
 void graphics_redraw_only(struct graphics_info *g)
 {
     if (!g)
@@ -208,8 +241,16 @@ void graphics_setup(struct graphics_info *main_graphics_info)
     size_t framebuffer_size = real_framebuffer_width * real_framebuffer_pixels_per_scanline * sizeof(struct framebuffer_pixel);
     real_framebuffer_end = (void *)((uintptr_t)real_framebuffer + framebuffer_size);
 
-    void *new_framebuffer_memory = kzalloc(framebuffer_size);
-    main_graphics_info->framebuffer = new_framebuffer_memory;
+    /* MAC-QEMU-FIX: page-align GOP map — unaligned phys/virt faults on Homebrew QEMU OVMF */
+    uintptr_t fb_phys = (uintptr_t)real_framebuffer;
+    uintptr_t map_phys = fb_phys & ~((uintptr_t)PAGING_PAGE_SIZE - 1);
+    uintptr_t map_phys_end = ((uintptr_t)real_framebuffer_end + PAGING_PAGE_SIZE - 1) & ~((uintptr_t)PAGING_PAGE_SIZE - 1);
+    size_t map_bytes = map_phys_end - map_phys;
+    size_t fb_offset = fb_phys - map_phys;
+
+    void *new_framebuffer_memory = kzalloc(map_bytes);
+    main_graphics_info->framebuffer = (struct framebuffer_pixel *)((uintptr_t)new_framebuffer_memory + fb_offset);
+    /* MAC-QEMU-FIX-END */
     main_graphics_info->children = vector_new(sizeof(struct graphics_info *), 4, 0);
     main_graphics_info->pixels = kzalloc(framebuffer_size);
     main_graphics_info->width = main_graphics_info->horizontal_resolution;
@@ -220,7 +261,9 @@ void graphics_setup(struct graphics_info *main_graphics_info)
     main_graphics_info->starting_y = 0;
 
     // Map the memory we allocated to point to the frame buffer point
-    paging_map_to(kernel_desc(), new_framebuffer_memory, real_framebuffer, real_framebuffer_end, PAGING_IS_WRITEABLE | PAGING_IS_PRESENT);
+    /* MAC-QEMU-FIX: map aligned range (pairs with block above) */
+    paging_map_to(kernel_desc(), new_framebuffer_memory, (void *)map_phys, (void *)map_phys_end, PAGING_IS_WRITEABLE | PAGING_IS_PRESENT);
+    /* MAC-QEMU-FIX-END */
 
     loaded_graphics_info = main_graphics_info;
     for (uint32_t y = 0; y < main_graphics_info->vertical_resolution; y++)
@@ -239,4 +282,8 @@ void graphics_setup(struct graphics_info *main_graphics_info)
 
     // Load the image formats.
     graphics_image_formats_init();
+
+    /* MAC-QEMU-FIX: push black to GOP now — else UEFI green stays during BMP fread (also in Linux+QEMU M2) */
+    graphics_redraw_all();
+    /* MAC-QEMU-FIX-END */
 }

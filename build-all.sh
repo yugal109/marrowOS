@@ -32,16 +32,22 @@ if [[ ! -f "$ROOT/bin/OVMF_VARS.fd" ]]; then
   cp /opt/homebrew/share/qemu/edk2-i386-vars.fd "$ROOT/bin/OVMF_VARS.fd"
 fi
 
-echo "==> creating bin/uefi.img"
-dd if=/dev/zero of="$ROOT/bin/uefi.img" bs=1048576 count=64
-MTOOLS_SKIP_CHECK=1 mformat -i "$ROOT/bin/uefi.img" ::
-MTOOLS_SKIP_CHECK=1 mmd -i "$ROOT/bin/uefi.img" ::EFI
-MTOOLS_SKIP_CHECK=1 mmd -i "$ROOT/bin/uefi.img" ::EFI/BOOT
-MTOOLS_SKIP_CHECK=1 mcopy -i "$ROOT/bin/uefi.img" -o "$ROOT/bin/MarrowOS.efi" ::EFI/BOOT/BOOTX64.EFI
+echo "==> creating GPT bin/uefi.img (ESP + MARROW, same idea as Linux+QEMU parted)"
+python3 "$ROOT/scripts/make_gpt_disk.py" "$ROOT/bin/uefi.img"
+# p1 ESP at 1MiB (LBA 2048), p2 MARROW at 32MiB (LBA 65536)
+ESP="$ROOT/bin/uefi.img@@1048576"
+MARROW="$ROOT/bin/uefi.img@@33554432"
+MTOOLS_SKIP_CHECK=1 mformat -i "$ESP" -v ESP -T 63488 ::
+MTOOLS_SKIP_CHECK=1 mformat -i "$MARROW" -v MARROW -T 65503 ::
+MTOOLS_SKIP_CHECK=1 mmd -i "$ESP" ::EFI
+MTOOLS_SKIP_CHECK=1 mmd -i "$ESP" ::EFI/BOOT
+MTOOLS_SKIP_CHECK=1 mcopy -i "$ESP" -o "$ROOT/bin/MarrowOS.efi" ::EFI/BOOT/BOOTX64.EFI
+MTOOLS_SKIP_CHECK=1 mcopy -i "$ESP" -o "$ROOT/uefi/startup.nsh" ::startup.nsh
 
 echo "==> kernel"
 cd "$ROOT"
 make all
 
 echo "done"
-MTOOLS_SKIP_CHECK=1 mdir -i "$ROOT/bin/uefi.img" ::EFI/BOOT
+MTOOLS_SKIP_CHECK=1 mdir -i "$ROOT/bin/uefi.img@@1048576" ::EFI/BOOT
+MTOOLS_SKIP_CHECK=1 mdir -i "$ROOT/bin/uefi.img@@33554432" ::

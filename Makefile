@@ -5,15 +5,24 @@ $(FILES): | directories
 INCLUDES = -I./src
 FLAGS = -g -ffreestanding -falign-jumps -falign-functions -falign-labels -falign-loops -fstrength-reduce -fomit-frame-pointer -finline-functions -Wno-unused-function -fno-builtin -Werror -Wno-unused-label -Wno-cpp -Wno-unused-parameter -nostdlib -nostartfiles -nodefaultlibs -Wall -O0 -Iinc
 
+# GPT image from build-all.sh:
+# MAC-QEMU-FIX: ESP + MARROW partition offsets for mtools (Linux+QEMU-style GPT disk)
+#   p1 ESP    at 1MiB  (LBA 2048)  — BOOTX64.EFI + kernel.bin (bootloader)
+#   p2 MARROW at 32MiB (LBA 65536) — @:/ kernel files
+UEFI_ESP    = ./bin/uefi.img@@1048576
+UEFI_MARROW = ./bin/uefi.img@@33554432
+# MAC-QEMU-FIX-END
+
 all: directories ./bin/boot.bin ./bin/kernel.bin user_programs
 	rm -rf ./bin/os.bin
 	dd if=./bin/boot.bin >> ./bin/os.bin
-	@test -f ./bin/uefi.img || (echo "missing bin/uefi.img (pack BOOTX64.EFI first)" && exit 1)
-	MTOOLS_SKIP_CHECK=1 mcopy -i ./bin/uefi.img -o ./bin/kernel.bin ::kernel.bin
-	MTOOLS_SKIP_CHECK=1 mcopy -i ./bin/uefi.img -o ./programs/simple/build/simple.bin ::simple.bin
-	MTOOLS_SKIP_CHECK=1 mcopy -i ./bin/uefi.img -o ./programs/blank/blank.elf ::blank.elf
-	MTOOLS_SKIP_CHECK=1 mcopy -i ./bin/uefi.img -o ./programs/shell/shell.elf ::shell.elf
-	MTOOLS_SKIP_CHECK=1 mcopy -i ./bin/uefi.img -o ./data/images/bkground.bmp ::bkground.bmp
+	@test -f ./bin/uefi.img || (echo "missing bin/uefi.img (run ./build-all.sh first)" && exit 1)
+	MTOOLS_SKIP_CHECK=1 mcopy -i $(UEFI_ESP) -o ./bin/kernel.bin ::kernel.bin
+	MTOOLS_SKIP_CHECK=1 mcopy -i $(UEFI_MARROW) -o ./bin/kernel.bin ::kernel.bin
+	MTOOLS_SKIP_CHECK=1 mcopy -i $(UEFI_MARROW) -o ./programs/simple/build/simple.bin ::simple.bin
+	MTOOLS_SKIP_CHECK=1 mcopy -i $(UEFI_MARROW) -o ./programs/blank/blank.elf ::blank.elf
+	MTOOLS_SKIP_CHECK=1 mcopy -i $(UEFI_MARROW) -o ./programs/shell/shell.elf ::shell.elf
+	MTOOLS_SKIP_CHECK=1 mcopy -i $(UEFI_MARROW) -o ./data/images/bkground.bmp ::bkground.bmp
 
 
 directories:

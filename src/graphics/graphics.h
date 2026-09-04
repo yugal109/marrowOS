@@ -90,5 +90,9 @@ struct graphics_info *graphics_screen_info();
 void graphics_setup(struct graphics_info *main_graphics_info);
 void graphics_redraw_all();
 void graphics_draw_image(struct graphics_info *graphics_info, struct image *image, int x, int y);
+/* MAC-QEMU-FIX: scaled blit for non-matching BMP vs GOP resolution */
+void graphics_draw_image_scaled(struct graphics_info *graphics_info, struct image *image,
+                                int x, int y, int dst_w, int dst_h);
+/* MAC-QEMU-FIX-END */
 
 #endif

@@ -218,9 +218,6 @@ void kernel_main()
     // setup the graphics
     graphics_setup(&default_graphics_info);
 
-    // enable interrupt descriptor table
-    idt_init();
-
     // enable fs functionality
     fs_init();
 
@@ -229,6 +226,19 @@ void kernel_main()
 
     // Initialize GPT(gloabl partition table) drives
     gpt_init();
+
+    /* MAC-QEMU-FIX: wallpaper before idt_init + scale to fill GOP (Linux+QEMU draws 1:1 after keyboard) */
+    struct image *img = graphics_image_load("@:/bkground.bmp");
+    struct graphics_info *screen = graphics_screen_info();
+    if (img && screen)
+    {
+        graphics_draw_image_scaled(screen, img, 0, 0, (int)screen->width, (int)screen->height);
+        graphics_redraw_all();
+    }
+
+    // enable interrupt descriptor table
+    idt_init();
+    /* MAC-QEMU-FIX-END */
 
     // Allocate a 1 MB stack for the kernel IDT
     size_t stack_size = 1024 * 1024;
@@ -296,10 +306,6 @@ void kernel_main()
 
     // Initialize all the system keyboards
     keyboard_init();
-
-    struct image *img = graphics_image_load("@:/bkground.bmp");
-    graphics_draw_image(NULL, img, 0, 0);
-    graphics_redraw_all();
 
     print("loading program...\n");
     struct process *process = 0;

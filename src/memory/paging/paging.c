@@ -223,14 +223,13 @@ int paging_map(struct paging_desc *desc, void *virt, void *phys, int flags)
 // Identity-map first 1MB (VGA/BIOS) plus every E820 type=1 region. Call before paging_switch.
 int paging_map_e820_memory_regions(struct paging_desc *desc)
 {
-    // Force-map the first 1MB regardless of E820 — VGA (0xB8000), BIOS data,
-    // and E820 buffer (0x7E00) live here and are marked reserved by E820.
-    // Without this, any print() call after paging_switch() would page fault.
+    /* MAC-QEMU-FIX: identity-map 4MB — kernel@1MB / early stack@2MB often reserved in E820 */
     paging_map_to(desc,
                   (void *)0x00,
                   (void *)0x00,
-                  (void *)0x100000,
+                  (void *)0x400000,
                   PAGING_IS_WRITEABLE | PAGING_IS_PRESENT);
+    /* MAC-QEMU-FIX-END */
 
     size_t total_entries = e820_total_entries();
     for (int i = 0; i < total_entries; i++)

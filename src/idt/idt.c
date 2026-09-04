@@ -27,10 +27,18 @@ void interrupt_handler(int interrupt, struct interrupt_frame *frame)
     kernel_page();
     if (interrupt_callbacks[interrupt] != 0)
     {
-        task_current_save_state(frame);
+        /* MAC-QEMU-FIX: no task yet during early boot — also present in Linux+QEMU M2 */
+        if (task_current())
+        {
+            task_current_save_state(frame);
+        }
         interrupt_callbacks[interrupt](frame);
     }
-    task_page();
+    if (task_current())
+    {
+        task_page();
+    }
+    /* MAC-QEMU-FIX-END */
     outb(0x20, 0x20);
 }
 
@@ -72,11 +80,13 @@ void idt_handle_exception()
 
 void idt_clock()
 {
-
     outb(0x20, 0x20);
-    print("test\n");
-    // switch to next task
-    task_next();
+    /* MAC-QEMU-FIX: do not task_next() before any task exists (also in Linux+QEMU M2) */
+    if (task_current())
+    {
+        task_next();
+    }
+    /* MAC-QEMU-FIX-END */
 }
 
 void idt_init()

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Mac QEMU + OVMF. Same idea as Daniel's run.sh (-machine pc, IDE, OVMF).
+# Mac QEMU + OVMF. Same idea as Linux+QEMU's run.sh (-machine pc, IDE, OVMF).
 # Homebrew firmware is pflash, not -bios /usr/share/ovmf/OVMF.fd
 set -euo pipefail
 
@@ -14,16 +14,16 @@ if [[ ! -f bin/uefi.img ]]; then
   exit 1
 fi
 
-if [[ ! -f bin/OVMF_VARS.fd ]]; then
-  cp "$OVMF_VARS_SRC" bin/OVMF_VARS.fd
-fi
+# Fresh NVRAM so OVMF does not keep "boot to UEFI Shell"
+cp "$OVMF_VARS_SRC" bin/OVMF_VARS.fd
 
+# pc = PIIX IDE at 0x1F0 (q35 is AHCI; OVMF + kernel ATA both miss the disk)
 qemu-system-x86_64 \
-  -machine q35 \
+  -machine pc \
   -cpu qemu64 \
   -m 512M \
-  -drive if=pflash,format=raw,readonly=on,file=/opt/homebrew/share/qemu/edk2-x86_64-code.fd \
+  -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
   -drive if=pflash,format=raw,file=bin/OVMF_VARS.fd \
-  -drive file=bin/uefi.img,format=raw,if=ide \
+  -hda bin/uefi.img \
   -display cocoa,zoom-to-fit=on \
   -net none
