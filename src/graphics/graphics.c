@@ -2,6 +2,7 @@
 #include "graphics.h"
 #include "kernel.h"
 #include "memory/paging/paging.h"
+#include "graphics/image/image.h"
 #include "memory/heap/kheap.h"
 #include "memory/memory.h"
 #include "lib/vector/vector.h"
@@ -202,5 +203,6 @@ void graphics_setup(struct graphics_info *main_graphics_info)
     // Start by pushing the main graphics information to the vector
     vector_push(graphics_info_vector, &main_graphics_info);
 
-    // TODO: Load the image formats.
+    // load the image formats
+    graphics_image_formats_load();
 }
