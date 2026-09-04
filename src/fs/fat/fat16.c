@@ -276,7 +276,7 @@ int fat16_resolve(struct disk *disk)
     disk->fs_private = fat_private;
     disk->filesystem = &fat16_fs;
 
-    struct disk_stream *stream = disk_streamer_new_from_disk(disk->id);
+    struct disk_stream *stream = disk_streamer_new_from_disk(disk);
     if (!stream)
     {
         res = -ENOMEM;
