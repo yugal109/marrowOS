@@ -20,4 +20,12 @@ struct paging_desc *kernel_desc();
 #define ERROR_I(value) ((int)(intptr_t)(value))
 #define ISERR(value) ((int)(int64_t)(value) < 0)
 
+#ifndef MIN
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#endif
+
+#ifndef MAX
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+#endif
+
 #endif

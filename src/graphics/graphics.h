@@ -94,5 +94,7 @@ void graphics_draw_image(struct graphics_info *graphics_info, struct image *imag
 void graphics_draw_image_scaled(struct graphics_info *graphics_info, struct image *image,
                                 int x, int y, int dst_w, int dst_h);
 /* MAC-QEMU-FIX-END */
+void graphics_redraw_region(struct graphics_info *g, uint32_t local_x, uint32_t local_y, uint32_t width, uint32_t height);
+void graphics_redraw_graphics_to_screen(struct graphics_info *relative_graphics, uint32_t rel_x, uint32_t rel_y, uint32_t width, uint32_t height);
 
 #endif
