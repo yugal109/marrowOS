@@ -9,6 +9,7 @@
 #include "memory/paging/paging.h"
 // #include "disk/disk.h"
 #include "graphics/graphics.h"
+#include "graphics/font.h"
 #include "fs/pparser.h"
 #include "string/string.h"
 #include "disk/streamer.h"
@@ -227,14 +228,25 @@ void kernel_main()
     // Initialize GPT(gloabl partition table) drives
     gpt_init();
 
+    // Initialize the font system (needs MARROW @:/sysfont.bmp)
+    font_system_init();
+
     /* MAC-QEMU-FIX: wallpaper before idt_init + scale to fill GOP (Linux+QEMU draws 1:1 after keyboard) */
-    struct image *img = graphics_image_load("@:/bkground.bmp");
-    struct graphics_info *screen = graphics_screen_info();
-    if (img && screen)
-    {
-        graphics_draw_image_scaled(screen, img, 0, 0, (int)screen->width, (int)screen->height);
-        graphics_redraw_all();
-    }
+    // struct image *img = graphics_image_load("@:/bkground.bmp");
+    // struct graphics_info *screen = graphics_screen_info();
+    // if (img && screen)
+    // {
+    //     graphics_draw_image_scaled(screen, img, 0, 0, (int)screen->width, (int)screen->height);
+    //     graphics_redraw_all();
+    // }
+
+    // draw text on screen
+    struct framebuffer_pixel white = {0};
+    white.red = 0xff;
+    white.green = 0xff;
+    white.blue = 0xff;
+    font_draw_text(graphics_screen_info(), NULL, 0, 0, "Hello world", white);
+    graphics_redraw_all();
 
     // enable interrupt descriptor table
     idt_init();

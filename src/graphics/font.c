@@ -212,6 +212,10 @@ int font_draw_text(struct graphics_info *graphics_info, struct font *font, int s
     int res = 0;
     int x = screen_x;
     int y = screen_y;
+    if (!font)
+    {
+        font = font_get_system_font();
+    }
     while (*str != 0)
     {
         res = font_draw(graphics_info, font, x, y, *str, font_color);
