@@ -14,6 +14,7 @@
 #include "string/string.h"
 #include "disk/streamer.h"
 #include "graphics/image/image.h"
+#include "graphics/terminal.h"
 // #include "task/task.h"
 #include "disk/gpt.h"
 #include "task/process.h"
@@ -26,74 +27,16 @@
 #include "keyboard/keyboard.h"
 #include "config.h"
 
-uint16_t *video_mem = 0;
-uint16_t terminal_row = 0;
-uint16_t terminal_col = 0;
-
-uint16_t terminal_make_char(char c, char color)
-{
-
-    //     // little endian format
-    return (color << 8) | c;
-}
-
-void terminal_putchar(int x, int y, char c, char color)
-{
-    video_mem[(y * VGA_WIDTH) + x] = terminal_make_char(c, color);
-}
-
-void terminal_backspace()
-{
-    if (terminal_row == 0 && terminal_col == 0)
-    {
-        return;
-    };
-    if (terminal_col == 0)
-    {
-        terminal_row -= 1;
-        terminal_col = VGA_WIDTH;
-    };
-    terminal_col -= 1;
-    terminal_writechar(' ', 15);
-    terminal_col -= 1;
-}
+struct terminal *system_terminal = NULL;
 
 void terminal_writechar(char c, char color)
 {
-    if (c == '\n')
+    if (!system_terminal)
     {
-        terminal_row += 1;
-        terminal_col = 0;
         return;
     }
 
-    // if it's backspace
-    if (c == 0x08)
-    {
-        terminal_backspace();
-        return;
-    }
-    terminal_putchar(terminal_col, terminal_row, c, color);
-    terminal_col += 1;
-    if (terminal_col >= VGA_WIDTH)
-    {
-        terminal_col = 0;
-        terminal_row += 1;
-    }
-}
-
-void terminal_initialize()
-{
-    video_mem = (uint16_t *)(0xB8000);
-    terminal_row = 0;
-    terminal_col = 0;
-    for (int y = 0; y < VGA_HEIGHT; y++)
-    {
-        for (int x = 0; x < VGA_WIDTH; x++)
-        {
-            terminal_putchar(x, y, ' ', 0);
-        }
-    }
+    terminal_write(system_terminal, c);
 }
 
 void print(const char *str)
@@ -177,7 +120,11 @@ struct paging_desc *kernel_desc()
 extern struct graphics_info default_graphics_info;
 void kernel_main()
 {
-    terminal_initialize();
+    struct graphics_info *screen_info = NULL;
+
+    print("Hello 64-bit!\n");
+
+    print("Total memory\n");
 
     print(itoa(e820_total_accessible_memory()));
     print("\n");
@@ -196,7 +143,7 @@ void kernel_main()
     data[1] = 'B';
     data[2] = 'C';
     data[3] = 0x00;
-    // print(data);
+    print(data);
 
     kernel_paging_desc = paging_desc_new(PAGING_MAP_LEVEL_4);
     if (!kernel_paging_desc)
@@ -219,6 +166,8 @@ void kernel_main()
     // setup the graphics
     graphics_setup(&default_graphics_info);
 
+    screen_info = graphics_screen_info();
+
     // enable fs functionality
     fs_init();
 
@@ -230,23 +179,32 @@ void kernel_main()
 
     // Initialize the font system (needs MARROW @:/sysfont.bmp)
     font_system_init();
+    // Setup the terminal system
+    terminal_system_setup();
 
-    /* MAC-QEMU-FIX: wallpaper before idt_init + scale to fill GOP (Linux+QEMU draws 1:1 after keyboard) */
-    // struct image *img = graphics_image_load("@:/bkground.bmp");
-    // struct graphics_info *screen = graphics_screen_info();
-    // if (img && screen)
-    // {
-    //     graphics_draw_image_scaled(screen, img, 0, 0, (int)screen->width, (int)screen->height);
-    //     graphics_redraw_all();
-    // }
+    /* MAC-QEMU-FIX: wallpaper before terminal_create so background_save snapshots it;
+     * scale to fill GOP (Linux+QEMU often draws 1:1 after keyboard). Must be before idt_init. */
+    struct image *img = graphics_image_load("@:/bkground.bmp");
+    if (img && screen_info)
+    {
+        graphics_draw_image_scaled(screen_info, img, 0, 0, (int)screen_info->width, (int)screen_info->height);
+        graphics_redraw_all();
+    }
 
-    // draw text on screen
-    struct framebuffer_pixel white = {0};
-    white.red = 0xff;
-    white.green = 0xff;
-    white.blue = 0xff;
-    font_draw_text(graphics_screen_info(), NULL, 0, 0, "Hello world", white);
-    graphics_redraw_all();
+    struct font *font = font_get_system_font();
+    if (!font)
+    {
+        panic("Failed to load system font\n");
+    }
+
+    struct framebuffer_pixel font_color = {0};
+    font_color.red = 0xff;
+
+    system_terminal = terminal_create(screen_info, 0, 0, screen_info->width, screen_info->height, font, font_color, TERMINAL_FLAG_BACKSPACE_ALLOWED);
+    if (!system_terminal)
+    {
+        panic("Failed to create system terminal\n");
+    }
 
     // enable interrupt descriptor table
     idt_init();

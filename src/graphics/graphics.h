@@ -84,6 +84,18 @@ struct graphics_info
     } event_handlers;
 };
 
+void graphics_draw_rect(
+    struct graphics_info *graphics_info,
+    uint32_t x,
+    uint32_t y,
+    size_t width,
+    size_t height,
+    struct framebuffer_pixel pixel_color);
+void graphics_ignore_color(struct graphics_info *graphics_info, struct framebuffer_pixel pixel_color);
+void graphics_transparency_key_set(struct graphics_info *graphics_info, struct framebuffer_pixel pixel_color);
+void graphics_transparency_key_remove(struct graphics_info *graphics_info);
+void graphics_ignore_color_finish(struct graphics_info *graphics_info);
+
 void graphics_redraw(struct graphics_info *g);
 void graphics_draw_pixel(struct graphics_info *graphics_info, uint32_t x, uint32_t y, struct framebuffer_pixel pixel);
 struct graphics_info *graphics_screen_info();
