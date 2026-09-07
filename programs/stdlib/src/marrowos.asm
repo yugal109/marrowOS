@@ -11,6 +11,7 @@ global marrowos_process_get_arguments:function
 global marrowos_system: function
 global marrowos_exit: function
 global marrowos_fopen: function
+global marrowos_fclose: function
 
 ; void print(const char* message)
 print:
@@ -88,3 +89,11 @@ marrowos_fopen:
     int 0x80        ;call thekernel
     add rsp,16      ;restore the stack
     ret 
+
+; void marrowos_fclose(size_t fd);
+marrowos_fclose:
+    mov rax,11 ; Command 11 fclose
+    push qword rdi
+    int 0x80
+    add rsp, 8 ; restore the stack
+    ret

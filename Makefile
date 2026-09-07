@@ -78,7 +78,6 @@ directories:
 ./build/isr80h/file.o: ./src/isr80h/file.c
 	x86_64-elf-gcc $(INCLUDES) -I./src/isr80h $(FLAGS) -std=gnu99 -c ./src/isr80h/file.c -o ./build/isr80h/file.o
 
-
 ./build/isr80h/heap.o: ./src/isr80h/heap.c
 	x86_64-elf-gcc $(INCLUDES) -I./src/isr80h $(FLAGS) -std=gnu99 -c ./src/isr80h/heap.c -o ./build/isr80h/heap.o
 

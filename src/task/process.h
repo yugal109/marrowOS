@@ -98,5 +98,6 @@ void process_get_arguments(struct process *process, int *argc, char ***argv);
 int process_terminate(struct process *process);
 struct process_file_handle *process_file_handle_get(struct process *process, int fd);
 int process_fopen(struct process *process, const char *path, const char *mode);
+int process_fclose(struct process *process, int fd);
 
 #endif
