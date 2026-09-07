@@ -50,6 +50,19 @@ void print(const char *str)
 
 void panic(const char *msg)
 {
+    // If terminal isn't up yet, paint the FB so we don't die on a silent black screen
+    struct graphics_info *gi = graphics_screen_info();
+    if (gi && gi->framebuffer)
+    {
+        struct framebuffer_pixel red = {.red = 0xff, .green = 0x00, .blue = 0x00, .reserved = 0};
+        for (uint32_t y = 0; y < gi->vertical_resolution; y++)
+        {
+            for (uint32_t x = 0; x < gi->horizontal_resolution; x++)
+            {
+                gi->framebuffer[y * gi->pixels_per_scanline + x] = red;
+            }
+        }
+    }
     print(msg);
     while (1)
     {
@@ -163,33 +176,28 @@ void kernel_main()
     paging_switch(kernel_paging_desc);
     kheap_post_paging();
 
-    // setup the graphics
+    // Setup the graphics
     graphics_setup(&default_graphics_info);
 
     screen_info = graphics_screen_info();
 
-    // enable fs functionality
+    // Enable interrupt descriptor table
+    idt_init();
+
+    // Enable fs functionality
     fs_init();
 
-    // search and initialize the disk
+    // Enable the disks
     disk_search_and_init();
 
     // Initialize GPT(gloabl partition table) drives
     gpt_init();
 
-    // Initialize the font system (needs MARROW @:/sysfont.bmp)
+    // Initialize the font system
     font_system_init();
+
     // Setup the terminal system
     terminal_system_setup();
-
-    /* MAC-QEMU-FIX: wallpaper before terminal_create so background_save snapshots it;
-     * scale to fill GOP (Linux+QEMU often draws 1:1 after keyboard). Must be before idt_init. */
-    struct image *img = graphics_image_load("@:/bkground.bmp");
-    if (img && screen_info)
-    {
-        graphics_draw_image_scaled(screen_info, img, 0, 0, (int)screen_info->width, (int)screen_info->height);
-        graphics_redraw_all();
-    }
 
     struct font *font = font_get_system_font();
     if (!font)
@@ -200,28 +208,32 @@ void kernel_main()
     struct framebuffer_pixel font_color = {0};
     font_color.red = 0xff;
 
+    // Terminal first (like Daniel) so print/panic are visible
     system_terminal = terminal_create(screen_info, 0, 0, screen_info->width, screen_info->height, font, font_color, TERMINAL_FLAG_BACKSPACE_ALLOWED);
     if (!system_terminal)
     {
         panic("Failed to create system terminal\n");
     }
 
-    // enable interrupt descriptor table
-    idt_init();
-    /* MAC-QEMU-FIX-END */
+    // Wallpaper after terminal; refresh background snapshot so glyphs don't punch black holes
+    struct image *img = graphics_image_load("@:/bkground.bmp");
+    if (!img)
+    {
+        panic("Failed to load bkground.bmp\n");
+    }
+    graphics_draw_image_scaled(screen_info, img, 0, 0, screen_info->width, screen_info->height);
+    graphics_redraw_all();
+    terminal_background_save(system_terminal);
 
     // Allocate a 1 MB stack for the kernel IDT
     size_t stack_size = 1024 * 1024;
     void *megabyte_stack_tss_end = kzalloc(stack_size);
     void *megabyte_stack_tss_begin = (void *)(((uintptr_t)megabyte_stack_tss_end) + stack_size);
-    if (megabyte_stack_tss_begin)
-    {
-    }
 
-    // block the first  page
+    // Block the first page
     paging_map(kernel_desc(), megabyte_stack_tss_end, megabyte_stack_tss_end, 0);
 
-    // setup the TSS
+    // Setup the TSS
     memset(&tss, 0x00, sizeof(tss));
     tss.rsp0 = (uint64_t)megabyte_stack_tss_begin;
     tss.iopb_offset = sizeof(tss); // No I/O permissions are used
@@ -229,63 +241,24 @@ void kernel_main()
     struct tss_desc_64 *tssdesc = (struct tss_desc_64 *)&gdt[KERNEL_LONG_MODE_TSS_GDT_INDEX];
     gdt_set_tss(tssdesc, &tss, sizeof(tss) - 1, TSS_DESCRIPTOR_TYPE, 0x00);
 
-    // data[0] = 'M';
-
-    // print(data);
-
-    // struct heap *kernel_heap = kheap_get();
-    // size_t total = heap_total_size(kernel_heap);
-    // size_t used = heap_total_used(kernel_heap);
-    // size_t avail = heap_total_available(kernel_heap);
-
-    // print("\n");
-    // print("Total heap size: ");
-    // print(itoa(total));
-    // print("\n");
-
-    // print("Total heap used: ");
-    // print(itoa(used));
-    // print("\n");
-
-    // print("Total heap available: ");
-    // print(itoa(avail));
-    // print("\n");
-
-    // // Initialize the interrupt descriptor table
-    // idt_init();
-
-    // // Setup the TSS
-    // memset(&tss, 0x00, sizeof(tss));
-    // tss.esp0 = 0x600000; // this is the kernel stack
-    // tss.ss0 = KERNEL_DATA_SELECTOR;
-
-    // Load the tss
+    // load the tss
     tss_load(KERNEL_LONG_MODE_TSS_SELECTOR);
 
-    // register isr80h commands
+    // Register isr80h commands
     isr80h_register_commands();
 
-    // // Setup paging
-    // kernel_chunk = paging_new_4gb(PAGING_IS_WRITEABLE | PAGING_IS_PRESENT | PAGING_ACCESS_FROM_ALL);
-
-    // // switch to kernel paging chunk
-    // paging_switch(kernel_chunk);
-
-    // // enable paging
-    // enable_paging();
-
-    // Initialize all the system keyboards
+    // Initialize the keyboard
     keyboard_init();
 
-    print("loading program...\n");
+    print("Loading program...\n");
     struct process *process = 0;
-    int res = process_load_switch("@:/shell.elf", &process);
+    int res = process_load_switch("@:/blank.elf", &process);
     if (res != MARROWOS_ALL_OK)
     {
-        panic("Failed to load user program.\n");
+        panic("Failed to load user program\n");
     }
 
-    // drop the user land
+    // Drop to user land
     task_run_first_ever_task();
 
     // struct command_argument argument;

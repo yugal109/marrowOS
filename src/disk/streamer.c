@@ -6,7 +6,6 @@
 
 struct disk_stream *disk_streamer_new(int disk_id)
 {
-
     struct disk *disk = disk_get(disk_id);
     if (!disk)
     {
@@ -35,7 +34,8 @@ int disk_streamer_seek(struct disk_stream *stream, int pos)
 
 int disk_streamer_read(struct disk_stream *stream, void *out, int total)
 {
-    /* MAC-QEMU-FIX: iterative read — Linux+QEMU's recursive version blows the stack on ~1MB BMP fread */
+    // Iterative (not recursive): large files like bkground.bmp need ~2000 sector
+    // reads; recursion blows the kernel stack and the load silently fails.
     char *out_ptr = (char *)out;
     int remaining = total;
 
@@ -66,7 +66,6 @@ int disk_streamer_read(struct disk_stream *stream, void *out, int total)
     }
 
     return 0;
-    /* MAC-QEMU-FIX-END */
 }
 
 void disk_streamer_close(struct disk_stream *stream)

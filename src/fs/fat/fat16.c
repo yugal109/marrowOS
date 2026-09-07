@@ -184,10 +184,8 @@ int fat16_get_total_items_for_directory(struct disk *disk, uint32_t directory_st
         goto out;
     }
 
-    /* MAC-QEMU-FIX: cap dir scan — while(1)+0xE5 continue can spin forever on bad FAT */
-    for (int n = 0; n < 512; n++)
+    while (1)
     {
-        // everytime we run  disk_streamer_read the 'pos' inside it increases by 32
         if (disk_streamer_read(stream, &item, sizeof(item)) != MARROWOS_ALL_OK)
         {
             res = -EIO;
@@ -206,7 +204,6 @@ int fat16_get_total_items_for_directory(struct disk *disk, uint32_t directory_st
         }
         i++;
     }
-    /* MAC-QEMU-FIX-END */
     res = i;
 
 out:
@@ -314,9 +311,6 @@ out:
     {
         kfree(fat_private);
         disk->fs_private = 0;
-        /* MAC-QEMU-FIX: clear stale filesystem pointer on resolve failure */
-        disk->filesystem = 0;
-        /* MAC-QEMU-FIX-END */
     }
     return res;
 }
@@ -448,26 +442,23 @@ static int fat16_read_internal_from_stream(struct disk *disk, struct disk_stream
     int res = MARROWOS_ALL_OK;
     struct fat_private *private = disk->fs_private;
     int size_of_cluster_bytes = private->header.primary_header.sectors_per_cluster * disk->sector_size;
-
-    /* MAC-QEMU-FIX: walk FAT once per cluster — Linux+QEMU re-walks from start every chunk (O(n^2) ATA) */
-    res = fat16_get_cluster_for_offset(disk, cluster, offset);
-    if (res < 0)
-    {
-        return res;
-    }
-
-    uint16_t cluster_to_use = (uint16_t)res;
+    uint16_t cluster_to_use = cluster;
     int bytes_read = 0;
     int starting_offset = offset;
-    char *out_ptr = (char *)out;
 
     while (total > 0)
     {
+        res = fat16_get_cluster_for_offset(disk, cluster, starting_offset);
+        if (res < 0)
+        {
+            break;
+        }
+
+        cluster_to_use = (uint16_t)res;
         int offset_from_cluster = starting_offset % size_of_cluster_bytes;
         int starting_sector = fat16_cluster_to_sector(private, cluster_to_use);
         int starting_pos = (starting_sector * disk->sector_size) + offset_from_cluster;
         int total_to_read = size_of_cluster_bytes - offset_from_cluster;
-
         if (total_to_read > total)
         {
             total_to_read = total;
@@ -479,35 +470,17 @@ static int fat16_read_internal_from_stream(struct disk *disk, struct disk_stream
             break;
         }
 
-        res = disk_streamer_read(stream, out_ptr, total_to_read);
+        res = disk_streamer_read(stream, out, total_to_read);
         if (res != MARROWOS_ALL_OK)
         {
             break;
         }
 
-        out_ptr += total_to_read;
+        out += total_to_read;
         starting_offset += total_to_read;
         bytes_read += total_to_read;
         total -= total_to_read;
-
-        if (total > 0)
-        {
-            int next = fat16_get_fat_entry(disk, cluster_to_use);
-            if (next < 0)
-            {
-                res = next;
-                break;
-            }
-            if (next >= 0xFFF8 || next == MARROWOS_FAT16_BAD_SECTOR ||
-                (next >= 0xFFF0 && next <= 0xFFF6) || next == 0x0000)
-            {
-                res = -EIO;
-                break;
-            }
-            cluster_to_use = (uint16_t)next;
-        }
     }
-    /* MAC-QEMU-FIX-END */
 
     if (res < 0)
     {

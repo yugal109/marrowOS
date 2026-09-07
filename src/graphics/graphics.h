@@ -102,10 +102,8 @@ struct graphics_info *graphics_screen_info();
 void graphics_setup(struct graphics_info *main_graphics_info);
 void graphics_redraw_all();
 void graphics_draw_image(struct graphics_info *graphics_info, struct image *image, int x, int y);
-/* MAC-QEMU-FIX: scaled blit for non-matching BMP vs GOP resolution */
 void graphics_draw_image_scaled(struct graphics_info *graphics_info, struct image *image,
-                                int x, int y, int dst_w, int dst_h);
-/* MAC-QEMU-FIX-END */
+                                int x, int y, uint32_t dest_w, uint32_t dest_h);
 void graphics_redraw_region(struct graphics_info *g, uint32_t local_x, uint32_t local_y, uint32_t width, uint32_t height);
 void graphics_redraw_graphics_to_screen(struct graphics_info *relative_graphics, uint32_t rel_x, uint32_t rel_y, uint32_t width, uint32_t height);
 

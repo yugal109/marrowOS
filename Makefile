@@ -5,29 +5,21 @@ $(FILES): | directories
 INCLUDES = -I./src
 FLAGS = -g -ffreestanding -falign-jumps -falign-functions -falign-labels -falign-loops -fstrength-reduce -fomit-frame-pointer -finline-functions -Wno-unused-function -fno-builtin -Werror -Wno-unused-label -Wno-cpp -Wno-unused-parameter -nostdlib -nostartfiles -nodefaultlibs -Wall -O0 -Iinc
 
-# GPT image from build-all.sh:
-# MAC-QEMU-FIX: ESP + MARROW partition offsets for mtools (Linux+QEMU-style GPT disk)
-#   p1 ESP    at 1MiB  (LBA 2048)  — BOOTX64.EFI + kernel.bin (bootloader)
-#   p2 MARROW at 32MiB (LBA 65536) — @:/ kernel files
-UEFI_ESP    = ./bin/uefi.img@@1048576
-UEFI_MARROW = ./bin/uefi.img@@33554432
-# MAC-QEMU-FIX-END
-
+# build.sh mounts partition 2 at /mnt/d before make (Daniel / Linux style).
 all: directories ./bin/boot.bin ./bin/kernel.bin user_programs
 	rm -rf ./bin/os.bin
 	dd if=./bin/boot.bin >> ./bin/os.bin
-	@test -f ./bin/uefi.img || (echo "missing bin/uefi.img (run ./build-all.sh first)" && exit 1)
-	MTOOLS_SKIP_CHECK=1 mcopy -i $(UEFI_ESP) -o ./bin/kernel.bin ::kernel.bin
-	MTOOLS_SKIP_CHECK=1 mcopy -i $(UEFI_MARROW) -o ./bin/kernel.bin ::kernel.bin
-	MTOOLS_SKIP_CHECK=1 mcopy -i $(UEFI_MARROW) -o ./programs/simple/build/simple.bin ::simple.bin
-	MTOOLS_SKIP_CHECK=1 mcopy -i $(UEFI_MARROW) -o ./programs/blank/blank.elf ::blank.elf
-	MTOOLS_SKIP_CHECK=1 mcopy -i $(UEFI_MARROW) -o ./programs/shell/shell.elf ::shell.elf
-	MTOOLS_SKIP_CHECK=1 mcopy -i $(UEFI_MARROW) -o ./data/images/bkground.bmp ::bkground.bmp
-	MTOOLS_SKIP_CHECK=1 mcopy -i $(UEFI_MARROW) -o ./data/images/sysfont.bmp ::sysfont.bmp
+	sudo cp ./bin/kernel.bin /mnt/d/kernel.bin
+	sudo cp ./programs/simple/build/simple.bin /mnt/d
+	sudo cp ./data/images/bkground.bmp /mnt/d
+	sudo cp ./data/images/sysfont.bmp /mnt/d/sysfont.bmp
+	sudo cp ./programs/blank/blank.elf /mnt/d
+	sudo cp ./programs/shell/shell.elf /mnt/d
 
 
 directories:
 	mkdir -p ./bin ./build/string ./build/disk ./build/graphics ./build/graphics/image ./build/lib/vector ./build/isr80h ./build/keyboard ./build/loader/formats ./build/task ./build/gdt ./build/fs ./build/fs/fat ./build/memory ./build/memory/heap ./build/io ./build/memory/paging ./build/idt
+	mkdir -p ./programs/stdlib/build ./programs/blank/build ./programs/shell/build ./programs/simple/build
 
 
 ./bin/kernel.bin: directories $(FILES)
@@ -176,12 +168,12 @@ user_programs:
 	cd ./programs/shell && $(MAKE) all
 
 user_programs_clean:
-	cd ./programs/simple && $(MAKE) all
+	cd ./programs/simple && $(MAKE) clean
 	cd ./programs/stdlib && $(MAKE) clean
 	cd ./programs/blank && $(MAKE) clean
 	cd ./programs/shell && $(MAKE) clean
 
-clean: 
+clean: user_programs_clean
 	rm -rf ./bin/boot.bin ./bin/kernel.bin ./bin/os.bin
 	rm -rf ./build/kernelfull.o
 	find ./build -type f -delete

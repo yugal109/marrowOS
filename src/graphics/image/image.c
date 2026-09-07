@@ -74,13 +74,12 @@ struct image *graphics_image_load(const char *path)
     int res = 0;
 
     fd = fopen(path, "r");
-    /* MAC-QEMU-FIX: fopen returns 0 on failure (never negative) */
+    // fopen returns 0 on failure (descriptors start at 1)
     if (fd <= 0)
     {
         res = -EIO;
         goto out;
     }
-    /* MAC-QEMU-FIX-END */
 
     struct file_stat stat;
     res = fstat(fd, &stat);

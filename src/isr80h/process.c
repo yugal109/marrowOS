@@ -46,11 +46,9 @@ void *isr80h_command7_invoke_system_command(struct interrupt_frame *frame)
     const char *program_name = root_command_argument->argument;
 
     char path[MARROWOS_MAX_PATH];
-    /* MAC-QEMU-FIX: GPT primary FS is @:/ (MARROW), not 0:/ like classic PeachOS */
     strcpy(path, "@:/");
     strncpy(path + 3, program_name, sizeof(path) - 3);
     path[sizeof(path) - 1] = 0;
-    /* MAC-QEMU-FIX-END */
 
     struct process *process = 0;
     int res = process_load_switch(path, &process);
