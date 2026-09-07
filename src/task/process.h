@@ -29,6 +29,19 @@ struct process_arguments
     char **argv;
 };
 
+struct process_file_handle
+{
+
+    // File number returend by fopen
+    int fd;
+
+    // filepath
+    char file_path[MARROWOS_MAX_PATH];
+
+    // Mode "w","r,"w+"
+    char mode[2];
+};
+
 struct process
 {
 
@@ -42,6 +55,10 @@ struct process
 
     // The memory (malloc) allocations of the process
     struct process_allocation allocations[MARROWOS_MAX_PROGRAM_ALLOCATION];
+
+    // File handle vector,
+    // vector of struct process_file_handle*
+    struct vector *file_handles;
 
     PROCESS_FILE_TYPE filetype;
     union
@@ -79,5 +96,7 @@ void process_free(struct process *process, void *ptr);
 int process_inject_arguments(struct process *process, struct command_argument *root_argument);
 void process_get_arguments(struct process *process, int *argc, char ***argv);
 int process_terminate(struct process *process);
+struct process_file_handle *process_file_handle_get(struct process *process, int fd);
+int process_fopen(struct process *process, const char *path, const char *mode);
 
 #endif

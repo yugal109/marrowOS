@@ -10,6 +10,7 @@ global marrowos_process_load_start:function
 global marrowos_process_get_arguments:function
 global marrowos_system: function
 global marrowos_exit: function
+global marrowos_fopen: function
 
 ; void print(const char* message)
 print:
@@ -78,3 +79,12 @@ marrowos_exit:
     mov rax,9; Command 9 process exit
     int 0x80
     ret
+
+; int marrowos_fopen(const char* filename,const char* mode)
+marrowos_fopen:
+    mov rax,10      ;Command 10, fopn
+    push qword rsi  ;Pushes the mode
+    push qword rdi  ;Push the filename
+    int 0x80        ;call thekernel
+    add rsp,16      ;restore the stack
+    ret 

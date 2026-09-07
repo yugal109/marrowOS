@@ -28,5 +28,6 @@ void marrowos_process_get_arguments(struct process_arguments *arguments);
 int marrowos_system(struct command_argument *arguments);
 int marrowos_system_run(const char *command);
 void marrowos_exit();
+int marrowos_fopen(const char* filename,const char* mode);
 
 #endif

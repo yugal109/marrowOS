@@ -2,15 +2,23 @@
 #include "stdlib.h"
 #include "stdio.h"
 #include "string.h"
+#include "file.h"
 
 int main(int argc, char **argv)
 {
+    int fd = fopen("@:/blank.elf", "r");
+    if (fd > 0)
+    {
+        printf("File blank.elf opened\n");
+    }
+    else
+    {
+        printf("File blank.elf opened failed\n");
+    }
+
     while (1)
     {
-        print("Hello World!\n");
-        for (int i = 0; i < 10000000; i++)
-        {
-        }
     }
+
     return 0;
 }
