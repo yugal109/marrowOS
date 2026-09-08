@@ -30,5 +30,6 @@ int marrowos_system_run(const char *command);
 void marrowos_exit();
 int marrowos_fopen(const char *filename, const char *mode);
 void marrowos_fclose(size_t fd);
+long marrowos_read(void *buffer, size_t size, size_t count, long fd);
 
 #endif

@@ -12,6 +12,7 @@ global marrowos_system: function
 global marrowos_exit: function
 global marrowos_fopen: function
 global marrowos_fclose: function
+global marrowos_read: function
 
 ; void print(const char* message)
 print:
@@ -96,4 +97,15 @@ marrowos_fclose:
     push qword rdi
     int 0x80
     add rsp, 8 ; restore the stack
+    ret
+
+; long marrowos_read(void* buffer,size_t size,size_t count,long fd);
+marrowos_read:
+    mov rax,12; Command 12 read
+    push qword rcx; fd
+    push qword rdx; count
+    push qword rsi; size
+    push qword rdi; buffer
+    int 0x80; invoke kernel
+    add rsp, 32; restore the stack
     ret
