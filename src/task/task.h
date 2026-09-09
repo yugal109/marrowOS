@@ -25,9 +25,6 @@ struct registers
 struct process;
 struct task
 {
-    // 4-level page tables for this task (replaces paging_4gb_chunk)
-    struct paging_desc *paging_desc;
-
     // The registers of the task when the task is not running
     struct registers registers;
 

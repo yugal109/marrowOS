@@ -73,6 +73,9 @@ struct process
     // The main process task
     struct task *task;
 
+    // the page directory ofthe process virtual memory
+    struct paging_desc *paging_desc;
+
     // The memory (malloc) allocations of the process
     struct vector *allocations;
 
