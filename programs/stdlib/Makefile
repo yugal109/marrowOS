@@ -1,6 +1,6 @@
 FILES=./build/start.asm.o ./build/marrowos.asm.o ./build/marrowos.o ./build/file.o ./build/stdlib.o ./build/stdio.o ./build/string.o ./build/memory.o ./build/start.o
 INCLUDES= -I./src
-FLAGS= -g -falign-jumps -falign-functions -falign-labels -falign-loops -fstrength-reduce -fomit-frame-pointer -finline-functions -Wno-unused-function -fno-builtin -Werror -Wno-unused-label -Wno-cpp -Wno-unused-parameter -nostdlib -nostartfiles -nodefaultlibs -Wall -O0 -Iinc
+FLAGS= -g -ffreestanding -falign-jumps -falign-functions -falign-labels -falign-loops -fstrength-reduce -fomit-frame-pointer -finline-functions -Wno-unused-function -fno-builtin -Werror -Wno-unused-label -Wno-cpp -Wno-unused-parameter -nostdlib -nostartfiles -nodefaultlibs -Wall -O0 -Iinc
 
 
 all: ${FILES}

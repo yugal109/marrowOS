@@ -15,6 +15,7 @@ global marrowos_fclose: function
 global marrowos_read: function
 global marrowos_fread: function
 global marrowos_fseek: function
+global marrowos_fstat: function
 
 ; void print(const char* message)
 print:
@@ -121,3 +122,12 @@ marrowos_fseek:
     int 0x80 ; invoke the kernel
     add rsp,24 ; restores the stack
     ret ;return
+
+; long marrowos_fstat(long fd,struct file_stat* file_stat_out)
+marrowos_fstat:
+    mov rax, 14    ; Command 14 fstat
+    push qword rsi  ; file_stat_out
+    push qword rdi  ; fd
+    int 0x80        ; call kernel
+    add rsp, 16     ; restore stack
+    ret

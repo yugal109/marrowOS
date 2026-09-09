@@ -15,6 +15,9 @@ struct process_arguments
     char **argv;
 };
 
+// forward declare file stat
+struct file_stat;
+
 void print(const char *message);
 int marrowos_getkey();
 void *marrowos_malloc(size_t size);
@@ -32,5 +35,6 @@ int marrowos_fopen(const char *filename, const char *mode);
 void marrowos_fclose(size_t fd);
 long marrowos_fread(void *buffer, size_t size, size_t count, long fd);
 long marrowos_fseek(long fd, long offset, long whence);
+long marrowos_fstat(long fd, struct file_stat *file_stat_out);
 
 #endif

@@ -19,3 +19,8 @@ int fseek(int fd, int offset, int whence)
 {
     return (int)marrowos_fseek(fd, offset, whence);
 }
+
+int fstat(int fd, struct file_stat *file_stat_out)
+{
+    return (int)marrowos_fstat(fd, file_stat_out);
+}
