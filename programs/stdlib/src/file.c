@@ -13,5 +13,5 @@ void fclose(int fd)
 
 int fread(void *buffer, size_t size, size_t count, long fd)
 {
-    return marrowos_fread(buffer, size, count, fd);
+    return marrowos_read(buffer, size, count, fd);
 }

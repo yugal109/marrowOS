@@ -14,7 +14,26 @@ typedef unsigned char PROCESS_FILE_TYPE;
 struct process_allocation
 {
     void *ptr;
+    void *end;
     size_t size;
+};
+
+enum
+{
+    PROCESS_ALLOCATION_REQUEST_IS_STACK_MEMORY = 0b00000001,
+};
+
+struct process_allocation_request
+{
+    struct process_allocation allocation;
+    int flags;
+    struct
+    {
+        void *addr;
+        void *end;
+
+        size_t total_bytes_left;
+    } peek;
 };
 
 struct command_argument
@@ -54,7 +73,7 @@ struct process
     struct task *task;
 
     // The memory (malloc) allocations of the process
-    struct process_allocation allocations[MARROWOS_MAX_PROGRAM_ALLOCATION];
+    struct vector *allocations;
 
     // File handle vector,
     // vector of struct process_file_handle*

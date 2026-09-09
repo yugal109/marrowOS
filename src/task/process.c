@@ -1,27 +1,31 @@
 #include "process.h"
 #include "config.h"
 #include "status.h"
-#include "memory/heap/kheap.h"
-#include "task.h"
+#include "task/task.h"
+#include "memory/memory.h"
+#include "string/string.h"
 #include "fs/file.h"
 #include "lib/vector/vector.h"
+#include "memory/heap/kheap.h"
 #include "memory/paging/paging.h"
-#include "string/string.h"
 #include "loader/formats/elfloader.h"
 #include "kernel.h"
-#include "memory/memory.h"
+#include <stdbool.h>
 
 // The current process that is running
 struct process *current_process = 0;
+
+static struct process *processes[MARROWOS_MAX_PROCESSES] = {};
+
+int process_get_allocation_by_start_addr(struct process *process, void *addr, struct process_allocation *allocation_out);
+
 int process_free_process(struct process *process);
 int process_close_file_handles(struct process *process);
-
-// All the processes
-static struct process *processes[MARROWOS_MAX_PROCESSES] = {};
 
 static void process_init(struct process *process)
 {
     memset(process, 0, sizeof(struct process));
+    process->allocations = vector_new(sizeof(struct process_allocation), 10, 0);
     process->file_handles = vector_new(sizeof(struct process_file_handle *), 4, 0);
 }
 
@@ -36,6 +40,7 @@ struct process *process_get(int process_id)
     {
         return NULL;
     }
+
     return processes[process_id];
 }
 
@@ -45,45 +50,82 @@ int process_switch(struct process *process)
     return 0;
 }
 
-static int process_find_free_allocation_index(struct process *process)
+int process_find_free_allocation_index(struct process *process)
 {
-    int res = -ENOMEM;
-    for (int i = 0; i < MARROWOS_MAX_PROGRAM_ALLOCATION; i++)
+    int res = 0;
+    bool found = false;
+    size_t allocation_size = vector_count(process->allocations);
+    for (size_t i = 0; i < allocation_size; i++)
     {
-        if (process->allocations[i].ptr == 0)
+        struct process_allocation allocation;
+        res = vector_at(process->allocations, i, &allocation, sizeof(allocation));
+        if (res < 0)
         {
-            res = i;
             break;
         }
+
+        if (allocation.ptr == NULL)
+        {
+            res = i;
+            found = true;
+            break;
+        }
+    }
+
+    if (!found)
+    {
+        struct process_allocation allocation = {0};
+        res = vector_push(process->allocations, &allocation);
     }
     return res;
 }
 
+int process_allocation_set_map(struct process *process, int allocation_entry_index, void *ptr, size_t size)
+{
+    int res = paging_map_to(process->task->paging_desc, ptr, ptr, paging_align_address(ptr + size), PAGING_IS_WRITEABLE | PAGING_IS_PRESENT | PAGING_ACCESS_FROM_ALL);
+    if (res < 0)
+    {
+        goto out;
+    }
+
+    struct process_allocation allocation;
+    res = vector_at(process->allocations, allocation_entry_index, &allocation, sizeof(allocation));
+    if (res < 0)
+    {
+        goto out;
+    }
+
+    allocation.ptr = ptr;
+    allocation.end = ptr + size;
+    allocation.size = size;
+
+    vector_overwrite(process->allocations, allocation_entry_index, &allocation, sizeof(allocation));
+
+out:
+    return res;
+}
 void *process_malloc(struct process *process, size_t size)
 {
+    int res = 0;
     void *ptr = kzalloc(size);
     if (!ptr)
     {
+        res = -ENOMEM;
         goto out_err;
     }
+
     int index = process_find_free_allocation_index(process);
     if (index < 0)
     {
+        res = -ENOMEM;
         goto out_err;
     }
 
-    int res = paging_map_to(process->task->paging_desc,
-                            ptr,
-                            ptr,
-                            paging_align_address(ptr + size),
-                            PAGING_IS_WRITEABLE | PAGING_IS_PRESENT | PAGING_ACCESS_FROM_ALL);
-
+    res = process_allocation_set_map(process, index, ptr, size);
     if (res < 0)
     {
         goto out_err;
     }
-    process->allocations[index].ptr = ptr;
-    process->allocations[index].size = size;
     return ptr;
 
 out_err:
@@ -94,38 +136,84 @@ out_err:
     return 0;
 }
 
+static bool process_is_process_pointer(struct process *process, void *ptr)
+{
+    size_t total_allocations = vector_count(process->allocations);
+    for (size_t i = 0; i < total_allocations; i++)
+    {
+        struct process_allocation allocation;
+        int res = vector_at(process->allocations, i, &allocation, sizeof(allocation));
+        if (res < 0)
+        {
+            break;
+        }
+
+        if (allocation.ptr == ptr)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 static void process_allocation_unjoin(struct process *process, void *ptr)
 {
-
-    for (int i = 0; i < MARROWOS_MAX_PROGRAM_ALLOCATION; i++)
+    size_t total_allocations = vector_count(process->allocations);
+    for (size_t i = 0; i < total_allocations; i++)
     {
-        if (process->allocations[i].ptr == ptr)
+        struct process_allocation allocation;
+        int res = vector_at(process->allocations, i, &allocation, sizeof(allocation));
+        if (res < 0)
         {
-            process->allocations[i].ptr = 0x00;
-            process->allocations[i].size = 0;
+            break;
+        }
+        if (allocation.ptr == ptr)
+        {
+            allocation.ptr = NULL;
+            allocation.end = NULL;
+            allocation.size = 0;
+            vector_overwrite(process->allocations, i, &allocation, sizeof(allocation));
         }
     }
 }
 
-static struct process_allocation *process_get_allocation_by_addr(struct process *process, void *addr)
+int process_get_allocation_by_start_addr(struct process *process, void *addr, struct process_allocation *allocation_out)
 {
-    for (int i = 0; i < MARROWOS_MAX_PROGRAM_ALLOCATION; i++)
+    size_t total_allocations = vector_count(process->allocations);
+    for (size_t i = 0; i < total_allocations; i++)
     {
-        if (process->allocations[i].ptr == addr)
+        struct process_allocation allocation;
+        int res = vector_at(process->allocations, i, &allocation, sizeof(allocation));
+        if (res < 0)
         {
-            return &process->allocations[i];
+            break;
+        }
+        if (allocation.ptr == addr)
+        {
+            *allocation_out = allocation;
+            return 0;
         }
     }
-    return 0;
+
+    return -EIO;
 }
 
-static int process_terminate_allocations(struct process *process)
+int process_terminate_allocations(struct process *process)
 {
-    for (int i = 0; i < MARROWOS_MAX_PROGRAM_ALLOCATION; i++)
+    size_t total_allocations = vector_count(process->allocations);
+    for (size_t i = 0; i < total_allocations; i++)
     {
-        if (process->allocations[i].ptr)
+        struct process_allocation allocation;
+        int res = vector_at(process->allocations, i, &allocation, sizeof(allocation));
+        if (res < 0)
         {
-            process_free(process, process->allocations[i].ptr);
+            break;
+        }
+
+        if (allocation.ptr)
+        {
+            process_free(process, allocation.ptr);
         }
     }
     return 0;
@@ -149,7 +237,6 @@ int process_free_elf_data(struct process *process)
 
     return 0;
 }
-
 int process_free_program_data(struct process *process)
 {
     int res = 0;
@@ -179,12 +266,14 @@ void process_switch_to_any()
             return;
         }
     }
-    panic("No processes to switch too \n");
+
+    panic("No processes to switch too\n");
 }
 
 static void process_unlink(struct process *process)
 {
     processes[process->id] = 0x00;
+
     if (current_process == process)
     {
         process_switch_to_any();
@@ -194,31 +283,38 @@ static void process_unlink(struct process *process)
 int process_free_process(struct process *process)
 {
     int res = 0;
-
     process_terminate_allocations(process);
     process_free_program_data(process);
     process_close_file_handles(process);
 
-    // Free the process stack memory
+    // Free the process allocations
+    vector_free(process->allocations);
+    process->allocations = NULL;
+
+    // free the process stack memory
     if (process->stack)
     {
         kfree(process->stack);
         process->stack = NULL;
     }
+    // Free the task
     if (process->task)
     {
         task_free(process->task);
         process->task = NULL;
     }
+
     kfree(process);
+
 out:
     return res;
 }
 
 int process_terminate(struct process *process)
 {
-    // unlike the process from the process array
+    // Unlink the process from the process array.
     process_unlink(process);
+
     int res = process_free_process(process);
     if (res < 0)
     {
@@ -244,6 +340,7 @@ int process_count_command_arguments(struct command_argument *root_argument)
         i++;
         current = current->next;
     }
+
     return i;
 }
 
@@ -280,38 +377,35 @@ int process_inject_arguments(struct process *process, struct command_argument *r
         current = current->next;
         i++;
     }
+
     process->arguments.argc = argc;
     process->arguments.argv = argv;
-
 out:
     return res;
-}
+};
 
 void process_free(struct process *process, void *ptr)
 {
-    // unlink the pages from the process for the given address
-    struct process_allocation *allocation = process_get_allocation_by_addr(process, ptr);
-    if (!allocation)
+    int res = 0;
+    // Unlink the pages from the process for the given address
+    struct process_allocation allocation;
+    res = process_get_allocation_by_start_addr(process, ptr, &allocation);
+    if (res < 0)
     {
-
-        // Oops it's not our pointer.
+        // Oops its not our pointer.
         return;
     }
 
-    int res = paging_map_to(process->task->paging_desc,
-                            allocation->ptr,
-                            allocation->ptr,
-                            paging_align_address(allocation->ptr + allocation->size),
-                            0x00);
+    res = paging_map_to(process->task->paging_desc, allocation.ptr, allocation.ptr, paging_align_address(allocation.ptr + allocation.size), 0x00);
     if (res < 0)
     {
         return;
     }
 
-    // unjoin the  allocation
+    // Unjoin the allocation
     process_allocation_unjoin(process, ptr);
 
-    // we can now free the memory
+    // We can now free the memory.
     kfree(ptr);
 }
 
@@ -362,6 +456,93 @@ out:
     return res;
 }
 
+static int process_load_elf(const char *filename, struct process *process)
+{
+    int res = 0;
+    struct elf_file *elf_file = 0;
+    res = elf_load(filename, &elf_file);
+    if (ISERR(res))
+    {
+        goto out;
+    }
+
+    process->filetype = PROCESS_FILE_TYPE_ELF;
+    process->elf_file = elf_file;
+out:
+    return res;
+}
+static int process_load_data(const char *filename, struct process *process)
+{
+    int res = 0;
+    res = process_load_elf(filename, process);
+    if (res == -EINFORMAT)
+    {
+        res = process_load_binary(filename, process);
+    }
+
+    return res;
+}
+
+int process_map_binary(struct process *process)
+{
+    int res = 0;
+    paging_map_to(process->task->paging_desc, (void *)MARROWOS_PROGRAM_VIRTUAL_ADDRESS, process->ptr, paging_align_address(process->ptr + process->size), PAGING_IS_PRESENT | PAGING_ACCESS_FROM_ALL | PAGING_IS_WRITEABLE);
+    return res;
+}
+
+static int process_map_elf(struct process *process)
+{
+    int res = 0;
+
+    struct elf_file *elf_file = process->elf_file;
+    struct elf_header *header = elf_header(elf_file);
+    struct elf64_phdr *phdrs = elf_pheader(header);
+    for (int i = 0; i < header->e_phnum; i++)
+    {
+        struct elf64_phdr *phdr = &phdrs[i];
+        void *phdr_phys_address = elf_phdr_phys_address(elf_file, phdr);
+        int flags = PAGING_IS_PRESENT | PAGING_ACCESS_FROM_ALL;
+        if (phdr->p_flags & PF_W)
+        {
+            flags |= PAGING_IS_WRITEABLE;
+        }
+        res = paging_map_to(process->task->paging_desc, paging_align_to_lower_page((void *)(uintptr_t)phdr->p_vaddr), paging_align_to_lower_page(phdr_phys_address), paging_align_address(phdr_phys_address + phdr->p_memsz), flags);
+        if (ISERR(res))
+        {
+            break;
+        }
+    }
+    return res;
+}
+int process_map_memory(struct process *process)
+{
+    int res = 0;
+
+    switch (process->filetype)
+    {
+    case PROCESS_FILE_TYPE_ELF:
+        res = process_map_elf(process);
+        break;
+
+    case PROCESS_FILE_TYPE_BINARY:
+        res = process_map_binary(process);
+        break;
+
+    default:
+        panic("process_map_memory: Invalid filetype\n");
+    }
+
+    if (res < 0)
+    {
+        goto out;
+    }
+
+    // Finally map the stack
+    paging_map_to(process->task->paging_desc, (void *)MARROWOS_PROGRAM_VIRTUAL_STACK_ADDRESS_END, process->stack, paging_align_address(process->stack + MARROWOS_USER_PROGRAM_STACK_SIZE), PAGING_IS_PRESENT | PAGING_ACCESS_FROM_ALL | PAGING_IS_WRITEABLE);
+out:
+    return res;
+}
+
 int process_get_free_slot()
 {
     for (int i = 0; i < MARROWOS_MAX_PROCESSES; i++)
@@ -369,17 +550,8 @@ int process_get_free_slot()
         if (processes[i] == 0)
             return i;
     }
-    return -EISTKN;
-}
 
-int process_load_switch(const char *filename, struct process **process)
-{
-    int res = process_load(filename, process);
-    if (res == 0)
-    {
-        process_switch(*process);
-    }
-    return res;
+    return -EISTKN;
 }
 
 int process_load(const char *filename, struct process **process)
@@ -391,132 +563,29 @@ int process_load(const char *filename, struct process **process)
         res = -EISTKN;
         goto out;
     }
+
     res = process_load_for_slot(filename, process, process_slot);
 out:
     return res;
 }
 
-static int process_load_elf(const char *filename, struct process *process)
+int process_load_switch(const char *filename, struct process **process)
 {
-    int res = 0;
-    struct elf_file *elf_file = 0;
-    res = elf_load(filename, &elf_file);
-    if (ISERR(res))
+    int res = process_load(filename, process);
+    if (res == 0)
     {
-        goto out;
-    }
-    process->filetype = PROCESS_FILE_TYPE_ELF;
-    process->elf_file = elf_file;
-out:
-    return res;
-}
-
-static int process_load_data(const char *filename, struct process *process)
-{
-    int res = 0;
-
-    res = process_load_elf(filename, process);
-    if (res == -EINFORMAT)
-    {
-        res = process_load_binary(filename, process);
-    }
-    return res;
-}
-
-int process_map_binary(struct process *process)
-{
-    int res = 0;
-    res = paging_map_to(process->task->paging_desc,
-                        (void *)MARROWOS_PROGRAM_VIRTUAL_ADDRESS,
-                        process->ptr,
-                        paging_align_address(process->ptr + process->size),
-                        PAGING_IS_PRESENT | PAGING_ACCESS_FROM_ALL | PAGING_IS_WRITEABLE);
-    return res;
-}
-
-static int process_map_elf(struct process *process)
-{
-    int res = 0;
-    struct elf_file *elf_file = process->elf_file;
-    struct elf_header *header = elf_header(elf_file);
-    struct elf64_phdr *phdrs = elf_pheader(header);
-
-    for (int i = 0; i < header->e_phnum; i++)
-    {
-        struct elf64_phdr *phdr = &phdrs[i];
-        if (phdr->p_type != PT_LOAD || phdr->p_memsz == 0)
-        {
-            continue;
-        }
-
-        void *phdr_phys_address = elf_phdr_phys_address(elf_file, phdr);
-        if (phdr->p_filesz == 0)
-        {
-            phdr_phys_address = kzalloc(phdr->p_memsz);
-            if (!phdr_phys_address)
-            {
-                res = -ENOMEM;
-                break;
-            }
-        }
-
-        int flags = PAGING_IS_PRESENT | PAGING_ACCESS_FROM_ALL;
-        if (phdr->p_flags & PF_W)
-        {
-            flags |= PAGING_IS_WRITEABLE;
-        }
-        res = paging_map_to(process->task->paging_desc,
-                            paging_align_to_lower_page((void *)(uintptr_t)phdr->p_vaddr),
-                            paging_align_to_lower_page(phdr_phys_address),
-                            paging_align_address((char *)phdr_phys_address + phdr->p_memsz),
-                            flags);
-        if (ISERR(res))
-        {
-            break;
-        }
+        process_switch(*process);
     }
 
-    return res;
-}
-
-int process_map_memory(struct process *process)
-{
-    int res = 0;
-    // For now just binary, in case we want elf and others, we do it in future.
-
-    switch (process->filetype)
-    {
-    case PROCESS_FILE_TYPE_ELF:
-        res = process_map_elf(process);
-        break;
-    case PROCESS_FILE_TYPE_BINARY:
-        res = process_map_binary(process);
-        break;
-    default:
-        panic("process_map_memory: Invalid filetype");
-    }
-
-    if (res < 0)
-    {
-        goto out;
-    }
-    // Finally map the stack
-    paging_map_to(process->task->paging_desc,
-                  (void *)MARROWOS_PROGRAM_VIRTUAL_STACK_ADDRESS_END,
-                  process->stack,
-                  paging_align_address(process->stack + MARROWOS_USER_PROGRAM_STACK_SIZE),
-                  PAGING_IS_PRESENT | PAGING_ACCESS_FROM_ALL | PAGING_IS_WRITEABLE);
-
-out:
     return res;
 }
 
 int process_load_for_slot(const char *filename, struct process **process, int process_slot)
 {
     int res = 0;
-    struct process *_process = 0;
+    struct process *_process;
 
-    if (process_get(process_slot))
+    if (process_get(process_slot) != 0)
     {
         res = -EISTKN;
         goto out;
@@ -548,11 +617,11 @@ int process_load_for_slot(const char *filename, struct process **process, int pr
 
     // Create a task
     _process->task = task_new(_process);
-    if (ERROR_I(_process->task) < 0)
+    if (ERROR_I(_process->task) == 0)
     {
         res = ERROR_I(_process->task);
 
-        // Task is NULL due to error code being returned in task_new
+        // Task is NULL due to error code being returned in task_new.
         _process->task = NULL;
         goto out;
     }
@@ -578,7 +647,88 @@ out:
             *process = NULL;
         }
 
-        // Free the process data left
+        // Free the process data
+    }
+    return res;
+}
+
+bool process_is_stack_memory(struct process *process, void *addr)
+{
+    return (uintptr_t)addr >= MARROWOS_PROGRAM_VIRTUAL_STACK_ADDRESS_END &&
+           (uintptr_t)addr <= MARROWOS_PROGRAM_VIRTUAL_STACK_ADDRESS_START;
+}
+
+int process_get_allocation_by_addr(struct process *process, void *addr, struct process_allocation_request *allocation_request_out)
+{
+    // Null the request
+    memset(allocation_request_out, 0, sizeof(struct process_allocation_request));
+
+    // Is this stack memory?
+    if (process_is_stack_memory(process, addr))
+    {
+        // we have stack memory
+        uint64_t addr_int = (uint64_t)addr;
+        uint64_t stack_size = MARROWOS_USER_PROGRAM_STACK_SIZE;
+        // START OF THE STACK IS HIGHER IN MEMORY REMEMBER
+        uint64_t total_bytes_left = MARROWOS_PROGRAM_VIRTUAL_STACK_ADDRESS_START - addr_int;
+        allocation_request_out->allocation.ptr = (void *)MARROWOS_PROGRAM_VIRTUAL_STACK_ADDRESS_END;
+        allocation_request_out->allocation.end = (void *)MARROWOS_PROGRAM_VIRTUAL_STACK_ADDRESS_START;
+        allocation_request_out->allocation.size = stack_size;
+        allocation_request_out->flags |= PROCESS_ALLOCATION_REQUEST_IS_STACK_MEMORY;
+        allocation_request_out->peek.addr = addr;
+        allocation_request_out->peek.end = (void *)MARROWOS_PROGRAM_VIRTUAL_STACK_ADDRESS_START;
+        allocation_request_out->peek.total_bytes_left = total_bytes_left;
+        return 0;
+    }
+
+    // Not a stack address then check the heap
+    size_t total_allocations = vector_count(process->allocations);
+    for (size_t i = 0; i < total_allocations; i++)
+    {
+        struct process_allocation allocation;
+        int res = vector_at(process->allocations, i, &allocation, sizeof(allocation));
+        if (res < 0)
+        {
+            break;
+        }
+
+        uint64_t allocation_addr = (uint64_t)allocation.ptr;
+        uint64_t allocation_addr_end = (uint64_t)allocation.end;
+        if ((uint64_t)addr >= allocation_addr &&
+            ((uint64_t)addr) <= allocation_addr_end)
+        {
+            size_t bytes_used = (uint64_t)addr - allocation_addr;
+            size_t bytes_left = allocation_addr_end - bytes_used;
+            allocation_request_out->allocation = allocation;
+            allocation_request_out->peek.addr = addr;
+            allocation_request_out->peek.end = (void *)allocation_addr_end;
+            allocation_request_out->peek.total_bytes_left = bytes_left;
+            return 0;
+        }
+    }
+
+    return -EIO;
+}
+
+int process_validate_memory_or_terminate(struct process *process, void *virt_addr, size_t space_needed)
+{
+    int res = 0;
+    struct process_allocation_request allocation_request;
+    res = process_get_allocation_by_addr(process, virt_addr, &allocation_request);
+    if (res < 0)
+    {
+        goto out;
+    }
+
+    if (allocation_request.peek.total_bytes_left < space_needed)
+    {
+        res = -EINVARG;
+        goto out;
+    }
+out:
+    if (res < 0)
+    {
+        process_terminate(process);
     }
     return res;
 }
@@ -586,12 +736,14 @@ out:
 int process_fread(struct process *process, void *virt_ptr, uint64_t size, uint64_t nmemb, int fd)
 {
     int res = 0;
+
     struct process_file_handle *handle = process_file_handle_get(process, fd);
     if (!handle)
     {
         res = -EIO;
         goto out;
     }
+
     size_t true_size = size * nmemb;
     res = process_validate_memory_or_terminate(process, virt_ptr, true_size);
     if (res < 0)
@@ -614,7 +766,6 @@ int process_fread(struct process *process, void *virt_ptr, uint64_t size, uint64
 out:
     return res;
 }
-
 int process_fclose(struct process *process, int fd)
 {
     int res = 0;
@@ -642,7 +793,7 @@ int process_fopen(struct process *process, const char *path, const char *mode)
 
     res = fd;
     // Allocate memory for the file handle
-    struct process_file_handle *handle = kzalloc(sizeof(struct process_file_handle));
+    struct process_file_handle *handle = kzalloc(sizeof(struct process_file_handler *));
     if (!handle)
     {
         res = -ENOMEM;
