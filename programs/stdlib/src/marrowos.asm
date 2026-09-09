@@ -16,6 +16,7 @@ global marrowos_read: function
 global marrowos_fread: function
 global marrowos_fseek: function
 global marrowos_fstat: function
+global marrowos_realloc: function
 
 ; void print(const char* message)
 print:
@@ -130,4 +131,13 @@ marrowos_fstat:
     push qword rdi  ; fd
     int 0x80        ; call kernel
     add rsp, 16     ; restore stack
+    ret
+
+; void* marrowos_realloc(void* old_ptr,size_t new_size);
+marrowos_realloc:
+    mov rax, 15     ; Command 15 realloc
+    push qword rsi  ; new_size
+    push qword rdi  ; old_ptr
+    int 0x80
+    add rsp, 16 ; RAX = new the pointer address
     ret
