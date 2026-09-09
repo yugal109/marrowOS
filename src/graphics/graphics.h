@@ -14,6 +14,7 @@ enum
     GRAPHICS_FLAG_CLONED_CHILDREN = 0b00000100,                    // children list is shared, not owned
     GRAPHICS_FLAG_DO_NOT_COPY_PIXELS = 0b00001000,                 // clone shell only, skip pixel data
     GRAPHICS_FLAG_DO_NOT_OVERWRITE_TRANSPARENT_PIXELS = 0b00010000 // paste: don't stomp transparent dest pixels
+
 };
 
 struct graphics_info;
@@ -95,6 +96,22 @@ void graphics_ignore_color(struct graphics_info *graphics_info, struct framebuff
 void graphics_transparency_key_set(struct graphics_info *graphics_info, struct framebuffer_pixel pixel_color);
 void graphics_transparency_key_remove(struct graphics_info *graphics_info);
 void graphics_ignore_color_finish(struct graphics_info *graphics_info);
+
+void graphics_set_z_index(struct graphics_info *graphics_info, uint32_t z_index);
+struct graphics_info *graphics_info_create_relative(struct graphics_info *source_graphics, size_t x, size_t y, size_t width, size_t height, int flags);
+void graphics_paste_pixels_to_pixels(
+    struct graphics_info *graphics_info_in,
+    struct graphics_info *graphics_info_out,
+    uint32_t src_x,
+    uint32_t src_y,
+    uint32_t width,
+    uint32_t height,
+    uint32_t dst_x,
+    uint32_t dst_y,
+    int flags);
+int graphics_pixel_get(struct graphics_info *graphics_info, uint32_t x, uint32_t y, struct framebuffer_pixel *pixel_out);
+
+void graphics_info_free(struct graphics_info *graphics_in);
 
 void graphics_redraw(struct graphics_info *g);
 void graphics_draw_pixel(struct graphics_info *graphics_info, uint32_t x, uint32_t y, struct framebuffer_pixel pixel);
