@@ -15,7 +15,7 @@
 // The current process that is running
 struct process *current_process = 0;
 
-static struct process *processes[MARROWOS_MAX_PROCESSES] = {};
+struct vector *process_vector = NULL;
 
 int process_get_allocation_by_start_addr(struct process *process, void *addr, struct process_allocation *allocation_out);
 
@@ -25,6 +25,11 @@ int process_close_file_handles(struct process *process);
 void *process_virtual_address_to_physical(struct process *process, void *virt_addr)
 {
     return paging_get_physical_address(process->paging_desc, virt_addr);
+}
+
+void process_system_init()
+{
+    process_vector = vector_new(sizeof(struct process *), 10, 0);
 }
 
 static void process_init(struct process *process)
@@ -41,12 +46,14 @@ struct process *process_current()
 
 struct process *process_get(int process_id)
 {
-    if (process_id < 0 || process_id >= MARROWOS_MAX_PROCESSES)
+    int res = 0;
+    struct process *process_out = NULL;
+    res = vector_at(process_vector, process_id, &process_out, sizeof(process_out));
+    if (res < 0)
     {
-        return NULL;
+        return ERROR(EINVARG);
     }
-
-    return processes[process_id];
+    return process_out;
 }
 
 int process_switch(struct process *process)
@@ -263,21 +270,28 @@ int process_free_program_data(struct process *process)
 
 void process_switch_to_any()
 {
-    for (int i = 0; i < MARROWOS_MAX_PROCESSES; i++)
+    size_t total_process_slots = vector_count(process_vector);
+    for (size_t i = 0; i < total_process_slots; i++)
     {
-        if (processes[i])
+        struct process *process = NULL;
+        int res = vector_at(process_vector, i, &process, sizeof(&process));
+        if (res < 0)
         {
-            process_switch(processes[i]);
+            break;
+        }
+        if (process)
+        {
+            process_switch(process);
             return;
         }
     }
-
     panic("No processes to switch too\n");
 }
 
 static void process_unlink(struct process *process)
 {
-    processes[process->id] = 0x00;
+    struct process *null_process = NULL;
+    vector_overwrite(process_vector, process->id, &null_process, sizeof(&null_process));
 
     if (current_process == process)
     {
@@ -554,13 +568,40 @@ out:
 
 int process_get_free_slot()
 {
-    for (int i = 0; i < MARROWOS_MAX_PROCESSES; i++)
+    int res = 0;
+    bool found = false;
+    size_t total_process_slots = vector_count(process_vector);
+
+    for (size_t i = 0; i < total_process_slots; i++)
     {
-        if (processes[i] == 0)
-            return i;
+        struct process *process_out = NULL;
+        res = vector_at(process_vector, i, &process_out, sizeof(process_out));
+        if (res < 0)
+        {
+            break;
+        }
+        if (!process_out)
+        {
+            found = true;
+            res = i;
+            break;
+        }
     }
 
-    return -EISTKN;
+    if (res < 0)
+    {
+        goto out;
+    }
+    if (!found)
+    {
+        struct process *null_process = NULL;
+        int process_index = vector_push(process_vector, &null_process);
+
+        // vector_push returned the index of the new null process pointer
+        res = process_index;
+    }
+out:
+    return res;
 }
 
 int process_load(const char *filename, struct process **process)
@@ -650,9 +691,9 @@ int process_load_for_slot(const char *filename, struct process **process, int pr
 
     *process = _process;
 
-    // Add the process to the array
-    processes[process_slot] = _process;
-
+    // Overwrite the free process pointer thats in the vector
+    // with our allocated one. SO we take ownership of the slot.
+    vector_overwrite(process_vector, process_slot, &_process, sizeof(&_process));
 out:
     if (ISERR(res))
     {
