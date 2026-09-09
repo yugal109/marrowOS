@@ -31,5 +31,6 @@ void marrowos_exit();
 int marrowos_fopen(const char *filename, const char *mode);
 void marrowos_fclose(size_t fd);
 long marrowos_fread(void *buffer, size_t size, size_t count, long fd);
+long marrowos_fseek(long fd, long offset, long whence);
 
 #endif

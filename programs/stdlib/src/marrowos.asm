@@ -14,6 +14,7 @@ global marrowos_fopen: function
 global marrowos_fclose: function
 global marrowos_read: function
 global marrowos_fread: function
+global marrowos_fseek: function
 
 ; void print(const char* message)
 print:
@@ -110,3 +111,13 @@ marrowos_fread:
     int 0x80; invoke kernel
     add rsp, 32; restore the stack
     ret
+
+; long marrowos_fseek(long fd,long offset,long whence)
+marrowos_fseek:
+    mov rax,13 ; command 13 fseek
+    push qword rdx ; whence
+    push qword rsi; offset
+    push qword rdi; fd
+    int 0x80 ; invoke the kernel
+    add rsp,24 ; restores the stack
+    ret ;return
