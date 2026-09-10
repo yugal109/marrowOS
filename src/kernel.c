@@ -15,7 +15,7 @@
 #include "disk/streamer.h"
 #include "graphics/image/image.h"
 #include "graphics/terminal.h"
-// #include "task/task.h"
+#include "graphics/windows.h"
 #include "disk/gpt.h"
 #include "task/process.h"
 #include "gdt/gdt.h"
@@ -199,6 +199,17 @@ void kernel_main()
     // Setup the terminal system
     terminal_system_setup();
 
+    // intitalize window system
+    window_system_initialize();
+
+    // in no particular order.
+    // initialize graphics stage two
+    // initialize mouse system
+    // initialize keyboard system
+
+    // Initialize window system stage two
+    window_system_initialize_stage2();
+
     struct font *font = font_get_system_font();
     if (!font)
     {
@@ -252,17 +263,20 @@ void kernel_main()
 
     // Initialize the keyboard
     keyboard_init();
-
-    print("Loading program...\n");
-    struct process *process = 0;
-    int res = process_load_switch("@:/blank.elf", &process);
-    if (res != MARROWOS_ALL_OK)
+    print("before window_create\n");
+    struct window *win = window_create(graphics_screen_info(), NULL, "Test Window", 50, 50, 300, 300, 0, 4395327);
+    print("after window_create\n");
+    if (win)
     {
-        panic("Failed to load user program\n");
+        // supresses warnings.
+    }
+
+    while (1)
+    {
     }
 
     // Drop to user land
-    task_run_first_ever_task();
+    // task_run_first_ever_task();
 
     // struct command_argument argument;
     // argument.next = 0x00;

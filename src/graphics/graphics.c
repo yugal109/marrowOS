@@ -362,7 +362,8 @@ void graphics_redraw(struct graphics_info *g)
 
     graphics_redraw_only(g);
 
-    // NOTE: Redraw children later.
+    // Redraw the children
+    graphics_redraw_children(g);
 }
 
 void graphics_redraw_all()
