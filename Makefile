@@ -5,11 +5,13 @@ $(FILES): | directories
 INCLUDES = -I./src
 FLAGS = -g -ffreestanding -falign-jumps -falign-functions -falign-labels -falign-loops -fstrength-reduce -fomit-frame-pointer -finline-functions -Wno-unused-function -fno-builtin -Werror -Wno-unused-label -Wno-cpp -Wno-unused-parameter -nostdlib -nostartfiles -nodefaultlibs -Wall -O0 -Iinc
 
-# build.sh mounts partition 2 at /mnt/d before make (Daniel / Linux style).
+# build.sh mounts partition 2 (the "MARROW"-labelled data partition) at
+# /mnt/d before make. kernel.bin is NOT copied here — it belongs on
+# partition 1 (the ESP) alongside BOOTX64.efi, and build.sh copies it there
+# itself, separately, after this target finishes.
 all: directories ./bin/boot.bin ./bin/kernel.bin user_programs
 	rm -rf ./bin/os.bin
 	dd if=./bin/boot.bin >> ./bin/os.bin
-	sudo cp ./bin/kernel.bin /mnt/d/kernel.bin
 	sudo cp ./programs/simple/build/simple.bin /mnt/d
 	sudo cp ./data/images/bkground.bmp /mnt/d
 	sudo cp ./data/images/clsicon.bmp /mnt/d

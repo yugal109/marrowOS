@@ -9,6 +9,10 @@ global gdt
 global default_graphics_info
 extern kernel_main
 
+; Provided by linker.ld — bounds of the .bss section, zeroed in _start
+extern __bss_start
+extern __bss_end
+
 ; Segment Selectors
 CODE_SEG equ 0x08
 DATA_SEG equ 0x10
@@ -100,7 +104,24 @@ long_mode_new_gdt_complete:
     mov al, 0x20    ; EOI command
     out 0x20, al    ; Send to master
     out 0xA0, al    ; Send to slave
-    
+
+    ; ---------------------------------------------------------------------
+    ; Zero the .bss section before entering C.
+    ;
+    ; The kernel is linked as a flat binary (OUTPUT_FORMAT(binary)), so .bss
+    ; is not present in the image at all — it's just an address range the C
+    ; code ASSUMES is already zero. QEMU zeroes VM RAM at startup so this was
+    ; invisible there, but real hardware leaves firmware/POST garbage behind,
+    ; making every zero-initialised global (system_terminal, kernel_paging_desc,
+    ; loaded_graphics_info, ...) come up holding junk.
+    ; ---------------------------------------------------------------------
+    mov rdi, __bss_start
+    mov rcx, __bss_end
+    sub rcx, rdi            ; rcx = number of bytes in .bss
+    xor rax, rax
+    cld
+    rep stosb               ; zero [rdi .. rdi+rcx)
+
     jmp kernel_main
 
 

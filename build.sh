@@ -36,8 +36,12 @@ sudo partprobe "$LOOPDEV"
 sleep 2
 lsblk "$LOOPDEV"
 
-sudo mkfs.vfat -n ABC "${LOOPDEV}p1"
-# Must match MARROWOS_KERNEL_FILESYSTEM_NAME in src/disk/disk.h ("MARROW     ")
+# Partition 1 is the ESP (flagged below) — bootloader + kernel image only.
+sudo mkfs.vfat -n BOOT "${LOOPDEV}p1"
+# Partition 2 is the data partition the kernel's own disk driver finds at
+# runtime by FAT volume label (gpt.c / disk.c search for this name, not a
+# fixed partition number — see MARROWOS_KERNEL_FILESYSTEM_NAME in
+# src/disk/disk.h). Everything except the bootloader and kernel.bin lives here.
 sudo mkfs.vfat -n MARROW "${LOOPDEV}p2"
 
 sudo mount -t vfat "${LOOPDEV}p2" /mnt/d
@@ -45,13 +49,17 @@ sudo mount -t vfat "${LOOPDEV}p2" /mnt/d
 # Build the 64 bit kernel (this repo root — not nested PeachOS64Bit)
 make clean
 make all
+sudo umount /mnt/d
 
 # Copy the UEFI bootloader from sibling edk2
 cp ./edk2/Build/MdeModule/DEBUG_GCC/X64/MarrowOS.efi ./bin/MarrowOS.efi
 
-# Copy the EFI file into partition two
+# Partition 1 (the ESP) gets exactly two files: the bootloader firmware
+# actually looks for, and the kernel image that bootloader loads.
+sudo mount -t vfat "${LOOPDEV}p1" /mnt/d
 sudo mkdir -p /mnt/d/EFI/BOOT
 sudo cp ./bin/MarrowOS.efi /mnt/d/EFI/Boot/BOOTX64.efi
+sudo cp ./bin/kernel.bin /mnt/d/kernel.bin
 sudo umount /mnt/d
 sudo losetup -d "$LOOPDEV"
 
