@@ -348,7 +348,7 @@ struct window *window_create(struct graphics_info *graphics_info, struct font *f
             goto out;
         }
 
-        struct graphics_info *border_right_graphics_info =
+        border_right_graphics_info =
             graphics_info_create_relative(root_graphics_info, total_window_width_bounds - WINDOW_BORDER_PIXEL_SIZE, WINDOW_TITLE_BAR_HEIGHT, WINDOW_BORDER_PIXEL_SIZE, height, 0);
         if (!border_right_graphics_info)
         {
@@ -356,7 +356,7 @@ struct window *window_create(struct graphics_info *graphics_info, struct font *f
             goto out;
         }
 
-        struct graphics_info *border_bottom_graphics_info =
+        border_bottom_graphics_info =
             graphics_info_create_relative(root_graphics_info, 0, total_window_height_bounds - WINDOW_BORDER_PIXEL_SIZE, width, WINDOW_BORDER_PIXEL_SIZE, 0);
         if (!border_bottom_graphics_info)
         {

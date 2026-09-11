@@ -1,6 +1,7 @@
 #ifndef DISK_H
 #define DISK_H
 #include "fs/file.h"
+#include <stdint.h>
 
 typedef unsigned int MARROWOS_DISK_TYPE;
 
@@ -26,12 +27,19 @@ struct disk
     size_t starting_lba;
     size_t ending_lba;
 
+    // Which legacy ATA position this disk lives at. Partitions inherit these
+    // from the physical disk they were found on.
+    uint16_t io_base;
+    uint16_t ctrl_base;
+    uint8_t drive_select;
+
     // The private data of our filesystem
     void *fs_private;
 };
 
-int disk_create_new(int type, int starting_lba, int ending_lba, size_t sector_size, struct disk **disk_out);
+int disk_create_new(int type, uint16_t io_base, uint16_t ctrl_base, uint8_t drive_select, int starting_lba, int ending_lba, size_t sector_size, struct disk **disk_out);
 void disk_search_and_init();
+size_t disk_total();
 struct disk *disk_get(int index);
 int disk_read_block(struct disk *idisk, unsigned int lba, int total, void *buf);
 struct disk *disk_primary_fs_disk();

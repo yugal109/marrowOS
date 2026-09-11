@@ -7,6 +7,10 @@
 #include "task/task.h"
 #include "io/io.h"
 #include "status.h"
+#include "string/string.h"
+#include "memory/heap/heap.h"
+
+extern struct heap kernel_minimal_heap;
 
 struct idt_desc idtr_descriptors[MARROWOS_TOTAL_INTERRUPTS];
 struct idtr_desc idtr_descriptor;
@@ -22,9 +26,12 @@ extern void int21h();
 extern void no_interrupt();
 extern void isr80h_wrapper();
 
+static int current_interrupt = -1;
+
 void interrupt_handler(int interrupt, struct interrupt_frame *frame)
 {
     kernel_page();
+    current_interrupt = interrupt;
     if (interrupt_callbacks[interrupt] != 0)
     {
         if (task_current())
@@ -69,11 +76,85 @@ void idt_set(int interrupt_no, void *address)
     desc->offset_3 = (_address >> 32) & 0x00000000ffffffff;
 }
 
-void idt_handle_exception()
+static char *idt_append_str(char *out, const char *s)
 {
-    panic("Panic Exception\n");
-    // process_terminate(task_current()->process);
-    // task_next();
+    while (*s)
+    {
+        *out++ = *s++;
+    }
+    *out = 0;
+    return out;
+}
+
+static char *idt_append_hex(char *out, uint64_t value)
+{
+    const char *digits = "0123456789ABCDEF";
+    out = idt_append_str(out, "0x");
+    for (int shift = 60; shift >= 0; shift -= 4)
+    {
+        *out++ = digits[(value >> shift) & 0xF];
+    }
+    *out = 0;
+    return out;
+}
+
+static int idt_exception_has_error_code(int exception)
+{
+    return exception == 8 || (exception >= 10 && exception <= 14) || exception == 17 ||
+           exception == 21 || exception == 29 || exception == 30;
+}
+
+void idt_handle_exception(struct interrupt_frame *frame)
+{
+    // The CPU pushes an error code before RIP for some exceptions, which shifts
+    // the fields in struct interrupt_frame by one slot, so read the raw words.
+    // Layout: 8 GPRs pushed by the stub, then [error code], RIP, CS, RFLAGS, RSP, SS
+    uint64_t words[14];
+    memcpy(words, (void *)frame, sizeof(words));
+    int has_error_code = idt_exception_has_error_code(current_interrupt);
+    uint64_t error_code = has_error_code ? words[8] : 0;
+    uint64_t rip = has_error_code ? words[9] : words[8];
+    uint64_t fault_rsp = has_error_code ? words[12] : words[11];
+    uint64_t cr2 = 0;
+    __asm__ volatile("mov %%cr2, %0" : "=r"(cr2));
+
+    static char msg[512];
+    char *p = msg;
+    p = idt_append_str(p, "EXCEPTION ");
+    p = idt_append_str(p, itoa(current_interrupt));
+    p = idt_append_str(p, " RIP=");
+    p = idt_append_hex(p, rip);
+    p = idt_append_str(p, " ERR=");
+    p = idt_append_hex(p, error_code);
+    p = idt_append_str(p, " CR2=");
+    p = idt_append_hex(p, cr2);
+    p = idt_append_str(p, "\nRAX=");
+    p = idt_append_hex(p, words[7]);
+    p = idt_append_str(p, " RDX=");
+    p = idt_append_hex(p, words[5]);
+    p = idt_append_str(p, " RSP=");
+    p = idt_append_hex(p, fault_rsp);
+    p = idt_append_str(p, "\nHEAP USED ");
+    p = idt_append_str(p, itoa((int)kernel_minimal_heap.used_blocks));
+    p = idt_append_str(p, " OF ");
+    p = idt_append_str(p, itoa((int)kernel_minimal_heap.total_blocks));
+    p = idt_append_str(p, " BLOCKS\nSTACK");
+
+    // No frame pointers (-fomit-frame-pointer), so list anything on the stack
+    // that looks like a kernel address; the callers are among them.
+    uint64_t *stack = (uint64_t *)fault_rsp;
+    int shown = 0;
+    for (int i = 0; i < 64 && shown < 8; i++)
+    {
+        if (stack[i] >= 0x100000 && stack[i] < 0x140000)
+        {
+            p = idt_append_str(p, " ");
+            p = idt_append_hex(p, stack[i]);
+            shown++;
+        }
+    }
+    idt_append_str(p, "\n");
+    panic(msg);
 }
 
 void idt_clock()

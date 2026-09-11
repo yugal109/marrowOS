@@ -38,3 +38,7 @@ module1
 module2
 
 /edk2/
+
+sata.sh
+rund.sh
+buildd.sh

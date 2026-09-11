@@ -15,7 +15,8 @@ build -a X64 -t GCC -p MdeModulePkg/MdeModulePkg.dsc \
 
 cd "$CURRENT_DIR"
 
-mkdir -p ./bin /mnt/d
+mkdir -p ./bin
+sudo mkdir -p /mnt/d
 
 dd if=/dev/zero bs=1048576 count=700 of=./bin/os.img
 LOOPDEV=$(sudo losetup --find --show --partscan ./bin/os.img)

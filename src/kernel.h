@@ -10,6 +10,10 @@
 void kernel_main();
 void print(const char *str);
 void panic(const char *msg);
+// Temporary boot-progress instrumentation: paints a colored strip in framebuffer
+// slot `slot` (0-15, left to right across the top of the screen) so failure points
+// can be bisected on real hardware where the terminal isn't up yet to print to.
+void debug_mark(int slot, uint8_t r, uint8_t g, uint8_t b);
 void kernel_page();
 void kernel_registers();
 void terminal_writechar(char c, char color);

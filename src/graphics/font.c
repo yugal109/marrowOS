@@ -24,11 +24,17 @@ struct font *font_get_system_font()
  */
 struct font *font_load_from_image(const char *filename, size_t pixel_width, size_t pixel_height, size_t y_offset_per_character)
 {
+    // slot 0: entered font_load_from_image, about to open/read the file from disk
+    debug_mark(0, 0x00, 0xff, 0x00); // green
     struct image *img_font = graphics_image_load(filename);
     if (!img_font)
     {
+        // never got here: file open/read (fat16) or bmp header parse failed
+        debug_mark(1, 0xff, 0xff, 0x00); // yellow
         return NULL;
     }
+    // slot 1: file loaded and bmp parsed successfully
+    debug_mark(1, 0x00, 0x00, 0xff); // blue
 
     size_t characters_per_row = img_font->width / pixel_width;
     size_t total_rows = img_font->height / pixel_height;
@@ -62,8 +68,12 @@ struct font *font_load_from_image(const char *filename, size_t pixel_width, size
     uint8_t *character_data = kzalloc(total_required_bytes_for_character_set);
     if (!character_data)
     {
+        // never got here: image loaded fine but heap allocation for the bitfont failed
+        debug_mark(2, 0xff, 0x00, 0xff); // magenta
         return NULL;
     }
+    // slot 2: character_data allocated, about to walk pixel rows into the bitfont
+    debug_mark(2, 0x00, 0xff, 0xff); // cyan
 
     // We start from space
     for (int row = 0; row < total_rows; row++)
@@ -95,7 +105,15 @@ struct font *font_load_from_image(const char *filename, size_t pixel_width, size
         }
     }
 
-    return font_create(character_data, total_characters, pixel_width, pixel_height, FONT_IMAGE_DRAW_SUBTRACT_FROM_INDEX);
+    // slot 3: pixel-row walk finished, about to allocate/return the struct font
+    debug_mark(3, 0xff, 0xa5, 0x00); // orange
+    struct font *f = font_create(character_data, total_characters, pixel_width, pixel_height, FONT_IMAGE_DRAW_SUBTRACT_FROM_INDEX);
+    if (f)
+    {
+        // slot 4: font_load_from_image fully succeeded
+        debug_mark(4, 0xff, 0xff, 0xff); // white
+    }
+    return f;
 }
 
 struct font *font_get_loaded_font(const char *filename)

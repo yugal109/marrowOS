@@ -3,9 +3,53 @@
 #include "memory/memory.h"
 #include "status.h"
 #include "config.h"
+#include "kernel.h"
 #include "memory/heap/kheap.h"
 #include "string/string.h"
 #include "lib/vector/vector.h"
+#include <stdint.h>
+
+#define ATA_PRIMARY_IO 0x1F0
+#define ATA_SECONDARY_IO 0x170
+#define ATA_PRIMARY_CTRL 0x3F6
+#define ATA_SECONDARY_CTRL 0x376
+
+#define ATA_DRIVE_MASTER 0xE0
+#define ATA_DRIVE_SLAVE 0xF0
+
+#define ATA_REG_DATA 0
+#define ATA_REG_SECCOUNT 2
+#define ATA_REG_LBA_LO 3
+#define ATA_REG_LBA_MID 4
+#define ATA_REG_LBA_HI 5
+#define ATA_REG_DRIVE 6
+#define ATA_REG_STATUS 7
+#define ATA_REG_COMMAND 7
+
+#define ATA_SR_ERR 0x01
+#define ATA_SR_DRQ 0x08
+#define ATA_SR_BSY 0x80
+
+#define ATA_CMD_READ_PIO 0x20
+#define ATA_CMD_IDENTIFY 0xEC
+
+// Device control register bit: stop the drive raising INTRQ, we only poll
+#define ATA_CTRL_NIEN 0x02
+
+#define PCI_CONFIG_ADDRESS 0xCF8
+#define PCI_CONFIG_DATA 0xCFC
+#define PCI_CLASS_MASS_STORAGE 0x01
+#define PCI_SUBCLASS_IDE 0x01
+
+// prog-if bits: set means that channel runs in PCI native mode, so its ports
+// come from the BARs instead of the fixed ISA addresses
+#define PCI_IDE_PRIMARY_NATIVE 0x01
+#define PCI_IDE_SECONDARY_NATIVE 0x04
+
+// Port I/O on the legacy ATA range runs at ISA speed (~1us per access), so these
+// counts work out to roughly 0.1s for a probe and ~1s for a transfer.
+#define ATA_TIMEOUT_PROBE 100000
+#define ATA_TIMEOUT_IO 1000000
 
 struct vector *disk_vector = NULL;
 
@@ -17,81 +61,135 @@ struct disk *disk = NULL;
 // where kernel files are found
 struct disk *primary_fs_disk = NULL;
 
-int disk_read_sector(int lba, int total, void *buf)
+// Selecting a drive needs ~400ns to settle before the controller reports valid
+// status. Four alternate-status reads is the standard way to burn that time.
+static void ata_io_delay(uint16_t ctrl_base)
 {
-    // lba   = which sector to start reading from (0-indexed) - each sector is 512 bytes long
-    // total = how many sectors to read
-    // buf   = where in RAM to put the data we read
-
-    // wait for the disk not to be busy
-    while (insb(0x1F7) & 0x80)
+    for (int i = 0; i < 4; i++)
     {
-        // spin
+        insb(ctrl_base);
+    }
+}
+
+// 0xFF means nothing is driving the bus (no device at this position); without
+// this check the old code span forever on an empty channel.
+static int ata_wait_not_busy(uint16_t io_base, int timeout)
+{
+    for (int i = 0; i < timeout; i++)
+    {
+        unsigned char status = insb(io_base + ATA_REG_STATUS);
+        if (status == 0xFF)
+        {
+            return -EIO;
+        }
+        if (!(status & ATA_SR_BSY))
+        {
+            return MARROWOS_ALL_OK;
+        }
+    }
+    return -EIO;
+}
+
+static int ata_wait_drq(uint16_t io_base, int timeout)
+{
+    for (int i = 0; i < timeout; i++)
+    {
+        unsigned char status = insb(io_base + ATA_REG_STATUS);
+        if (status == 0xFF || (status & ATA_SR_ERR))
+        {
+            return -EIO;
+        }
+        if (status & ATA_SR_DRQ)
+        {
+            return MARROWOS_ALL_OK;
+        }
+    }
+    return -EIO;
+}
+
+static int ata_identify(uint16_t io_base, uint16_t ctrl_base, uint8_t drive_select)
+{
+    outb(io_base + ATA_REG_DRIVE, drive_select);
+    ata_io_delay(ctrl_base);
+
+    outb(io_base + ATA_REG_SECCOUNT, 0);
+    outb(io_base + ATA_REG_LBA_LO, 0);
+    outb(io_base + ATA_REG_LBA_MID, 0);
+    outb(io_base + ATA_REG_LBA_HI, 0);
+    outb(io_base + ATA_REG_COMMAND, ATA_CMD_IDENTIFY);
+    ata_io_delay(ctrl_base);
+
+    unsigned char status = insb(io_base + ATA_REG_STATUS);
+    if (status == 0x00 || status == 0xFF)
+    {
+        return -EIO;
     }
 
-    // Select drive: bits 7..4=0xE, bits 3..0 = high nibble of lba
-    outb(0x1F6, 0xE0 | ((lba >> 24) & 0x0F));
+    if (ata_wait_not_busy(io_base, ATA_TIMEOUT_PROBE) != MARROWOS_ALL_OK)
+    {
+        return -EIO;
+    }
 
-    // Sector count
-    outb(0x1F2, (unsigned char)total);
-    // LBA low, mid, high
+    // A non-zero signature here means ATAPI, which aborts IDENTIFY and is not
+    // something we can read sectors from.
+    if (insb(io_base + ATA_REG_LBA_MID) != 0 || insb(io_base + ATA_REG_LBA_HI) != 0)
+    {
+        return -EIO;
+    }
 
-    outb(0x1F3, (unsigned char)(lba & 0xff));
-    // Send the LOWEST 8 bits of the LBA address.
-    // (lba & 0xff) masks out everything except the bottom byte.
+    if (ata_wait_drq(io_base, ATA_TIMEOUT_PROBE) != MARROWOS_ALL_OK)
+    {
+        return -EIO;
+    }
 
-    outb(0x1F4, (unsigned char)((lba >> 8) & 0xff));
-    // Send the NEXT 8 bits of the LBA address (bits 8-15).
-    // Shift right by 8, so those bits become the new lowest byte, then send that byte.
+    // Drain the identify block so the drive is left idle rather than mid-transfer
+    for (int i = 0; i < 256; i++)
+    {
+        insw(io_base + ATA_REG_DATA);
+    }
 
-    outb(0x1F5, (unsigned char)((lba >> 16) & 0xff));
-    // Send the NEXT 8 bits of the LBA address (bits 16-23).
-    // Same idea, shifted further.
-    // (Combined with the 4 bits sent earlier via 0x1F6, that's a full 28-bit LBA address.)
+    return MARROWOS_ALL_OK;
+}
 
-    outb(0x1F7, 0x20);
-    // Send the actual READ command (0x20 = "read sectors").
-    // Everything above was just SETUP — this line is what actually tells the
-    // drive "now go do it".
+static int disk_read_sector(uint16_t io_base, uint16_t ctrl_base, uint8_t drive_select, int lba, int total, void *buf)
+{
+    if (ata_wait_not_busy(io_base, ATA_TIMEOUT_IO) != MARROWOS_ALL_OK)
+    {
+        return -EIO;
+    }
+
+    outb(io_base + ATA_REG_DRIVE, drive_select | ((lba >> 24) & 0x0F));
+    ata_io_delay(ctrl_base);
+
+    outb(io_base + ATA_REG_SECCOUNT, (unsigned char)total);
+    outb(io_base + ATA_REG_LBA_LO, (unsigned char)(lba & 0xff));
+    outb(io_base + ATA_REG_LBA_MID, (unsigned char)((lba >> 8) & 0xff));
+    outb(io_base + ATA_REG_LBA_HI, (unsigned char)((lba >> 16) & 0xff));
+    outb(io_base + ATA_REG_COMMAND, ATA_CMD_READ_PIO);
 
     unsigned short *ptr = (unsigned short *)buf;
-    // Treat our destination buffer as an array of 16-bit values (words),
-    // since we're about to read 2 bytes at a time.
-    // ptr will "walk forward" through the buffer as we fill it with data.
-
     for (int b = 0; b < total; b++)
     {
-        // Wait for the disk not to be busy
-        while (insb(0x1F7) & 0x80)
-        {
-            // spin
-        }
-
-        // Check error bit
-        char status = insb(0x1F7);
-        if (status & 0x01)
+        if (ata_wait_not_busy(io_base, ATA_TIMEOUT_IO) != MARROWOS_ALL_OK)
         {
             return -EIO;
         }
 
-        // Wait for the buffer to be ready
-        while (!(insb(0x1F7) & 0x08))
+        if (ata_wait_drq(io_base, ATA_TIMEOUT_IO) != MARROWOS_ALL_OK)
         {
-            // spin
+            return -EIO;
         }
 
-        // Copy from hard disk to memory
         for (int word = 0; word < 256; word++)
         {
-            *ptr++ = insw(0x1F0);
+            *ptr++ = insw(io_base + ATA_REG_DATA);
         }
     }
 
     return 0;
-    // Signal success back to whoever called this function.
 }
 
-int disk_create_new(int type, int starting_lba, int ending_lba, size_t sector_size, struct disk **disk_out)
+int disk_create_new(int type, uint16_t io_base, uint16_t ctrl_base, uint8_t drive_select, int starting_lba, int ending_lba, size_t sector_size, struct disk **disk_out)
 {
     int res = 0;
     struct disk *disk = kzalloc(sizeof(struct disk));
@@ -105,6 +203,9 @@ int disk_create_new(int type, int starting_lba, int ending_lba, size_t sector_si
     disk->sector_size = sector_size;
     disk->starting_lba = starting_lba;
     disk->ending_lba = ending_lba;
+    disk->io_base = io_base;
+    disk->ctrl_base = ctrl_base;
+    disk->drive_select = drive_select;
 
     // Not all disks have filesystems its not an error not to have one
     disk->filesystem = fs_resolve(disk);
@@ -130,23 +231,128 @@ int disk_create_new(int type, int starting_lba, int ending_lba, size_t sector_si
 out:
     return res;
 }
+
+static int ata_drives_found = 0;
+
+static uint32_t pci_config_read32(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset)
+{
+    uint32_t address = 0x80000000 | ((uint32_t)bus << 16) | ((uint32_t)slot << 11) | ((uint32_t)func << 8) | (offset & 0xFC);
+    outdw(PCI_CONFIG_ADDRESS, address);
+    return insdw(PCI_CONFIG_DATA);
+}
+
+static void disk_probe_channel(uint16_t io_base, uint16_t ctrl_base)
+{
+    outb(ctrl_base, ATA_CTRL_NIEN);
+
+    uint8_t drives[2] = {ATA_DRIVE_MASTER, ATA_DRIVE_SLAVE};
+    for (int d = 0; d < 2; d++)
+    {
+        if (ata_identify(io_base, ctrl_base, drives[d]) != MARROWOS_ALL_OK)
+        {
+            continue;
+        }
+
+        // slots 10-15: one green block per drive found
+        debug_mark(10 + ata_drives_found, 0x00, 0xff, 0x00);
+        ata_drives_found++;
+
+        struct disk *found = NULL;
+        if (disk_create_new(MARROWOS_DISK_TYPE_REAL, io_base, ctrl_base, drives[d], 0, 0, MARROWOS_SECTOR_SIZE, &found) < 0)
+        {
+            continue;
+        }
+
+        if (!disk)
+        {
+            disk = found;
+        }
+    }
+}
+
+// Real SATA controllers in "IDE mode" usually run in PCI native mode, where the
+// channels live at firmware-assigned ports rather than 0x1F0/0x170. QEMU's PIIX
+// reports legacy mode, which is why hardcoded ports only ever worked there.
+static int disk_probe_pci_ide_controllers()
+{
+    int controllers = 0;
+    for (int bus = 0; bus < 256; bus++)
+    {
+        for (int slot = 0; slot < 32; slot++)
+        {
+            for (int func = 0; func < 8; func++)
+            {
+                uint32_t id = pci_config_read32(bus, slot, func, 0x00);
+                if ((id & 0xFFFF) == 0xFFFF)
+                {
+                    if (func == 0)
+                    {
+                        break;
+                    }
+                    continue;
+                }
+
+                uint32_t class_reg = pci_config_read32(bus, slot, func, 0x08);
+                uint8_t class_code = (class_reg >> 24) & 0xFF;
+                uint8_t subclass = (class_reg >> 16) & 0xFF;
+                uint8_t prog_if = (class_reg >> 8) & 0xFF;
+                if (class_code != PCI_CLASS_MASS_STORAGE || subclass != PCI_SUBCLASS_IDE)
+                {
+                    continue;
+                }
+                controllers++;
+
+                uint16_t primary_io = ATA_PRIMARY_IO;
+                uint16_t primary_ctrl = ATA_PRIMARY_CTRL;
+                if (prog_if & PCI_IDE_PRIMARY_NATIVE)
+                {
+                    primary_io = pci_config_read32(bus, slot, func, 0x10) & 0xFFFC;
+                    // Native control block is 4 bytes; alt-status/device-control sits at +2
+                    primary_ctrl = (pci_config_read32(bus, slot, func, 0x14) & 0xFFFC) + 2;
+                }
+
+                uint16_t secondary_io = ATA_SECONDARY_IO;
+                uint16_t secondary_ctrl = ATA_SECONDARY_CTRL;
+                if (prog_if & PCI_IDE_SECONDARY_NATIVE)
+                {
+                    secondary_io = pci_config_read32(bus, slot, func, 0x18) & 0xFFFC;
+                    secondary_ctrl = (pci_config_read32(bus, slot, func, 0x1C) & 0xFFFC) + 2;
+                }
+
+                // A zero BAR means firmware never assigned the channel any ports
+                if (primary_io != 0)
+                {
+                    disk_probe_channel(primary_io, primary_ctrl);
+                }
+                if (secondary_io != 0)
+                {
+                    disk_probe_channel(secondary_io, secondary_ctrl);
+                }
+            }
+        }
+    }
+    return controllers;
+}
+
 void disk_search_and_init()
 {
-    int res = 0;
     disk_vector = vector_new(sizeof(struct disk *), 4, 0);
     if (!disk_vector)
     {
-        res = -ENOMEM;
-        goto out;
+        return;
     }
 
-    res = disk_create_new(MARROWOS_DISK_TYPE_REAL, 0, 0, MARROWOS_SECTOR_SIZE, &disk);
-    if (res < 0)
+    if (disk_probe_pci_ide_controllers() == 0)
     {
-        goto out;
+        // No PCI IDE controller visible at all: fall back to the fixed ISA ports
+        disk_probe_channel(ATA_PRIMARY_IO, ATA_PRIMARY_CTRL);
+        disk_probe_channel(ATA_SECONDARY_IO, ATA_SECONDARY_CTRL);
     }
-out:
-    return;
+}
+
+size_t disk_total()
+{
+    return vector_count(disk_vector);
 }
 
 struct disk *disk_primary()
@@ -162,7 +368,6 @@ struct disk *disk_primary_fs_disk()
 struct disk *disk_get(int index)
 {
     size_t total_disks = vector_count(disk_vector);
-    ;
     if (index >= (int)total_disks)
     {
         // out of bounds no such disk is loaded
@@ -188,5 +393,5 @@ int disk_read_block(struct disk *idisk, unsigned int lba, int total, void *buf)
         }
     }
 
-    return disk_read_sector(absolute_lba, total, buf);
+    return disk_read_sector(idisk->io_base, idisk->ctrl_base, idisk->drive_select, absolute_lba, total, buf);
 }
