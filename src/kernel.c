@@ -7,12 +7,13 @@
 #include "memory/heap/heap.h"
 #include "memory/heap/kheap.h"
 #include "memory/paging/paging.h"
-// #include "disk/disk.h"
+#include "io/tsc.h"
 #include "graphics/graphics.h"
 #include "graphics/font.h"
 #include "fs/pparser.h"
 #include "string/string.h"
 #include "disk/streamer.h"
+#include "disk/disk.h"
 #include "graphics/image/image.h"
 #include "graphics/terminal.h"
 #include "graphics/windows.h"
@@ -263,16 +264,24 @@ void kernel_main()
 
     // Initialize the keyboard
     keyboard_init();
-    print("before window_create\n");
-    struct window *win = window_create(graphics_screen_info(), NULL, "Test Window", 50, 50, 300, 300, 0, 4395327);
-    print("after window_create\n");
-    if (win)
+    // struct window *win = window_create(graphics_screen_info(), NULL, "Test Window", 50, 50, 300, 300, 0, 4395327);
+    // if (win)
+    // {
+    //     // supresses warnings.
+    // }
+
+    for (size_t i = 0; i < 10; i++)
     {
-        // supresses warnings.
+        print("Another second\n");
+        udelay(1000000);
     }
 
-    while (1)
+    print("Loading program...\n");
+    struct process *process = 0;
+    int res = process_load_switch("@:/blank.elf", &process);
+    if (res != MARROWOS_ALL_OK)
     {
+        panic("Failed to load user program\n");
     }
 
     // Drop to user land
@@ -298,8 +307,4 @@ void kernel_main()
 
     // enable the system interrupts
     // enable_interrupts();
-
-    while (1)
-    {
-    }
 }
