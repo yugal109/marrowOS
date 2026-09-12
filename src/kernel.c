@@ -48,28 +48,6 @@ void print(const char *str)
     }
 }
 
-#define DEBUG_MARK_STRIP_HEIGHT 20
-
-void debug_mark(int slot, uint8_t r, uint8_t g, uint8_t b)
-{
-    struct graphics_info *gi = graphics_screen_info();
-    if (!gi || !gi->framebuffer)
-    {
-        return;
-    }
-    struct framebuffer_pixel color = {.red = r, .green = g, .blue = b, .reserved = 0};
-    uint32_t strip_height = DEBUG_MARK_STRIP_HEIGHT;
-    uint32_t slot_width = gi->horizontal_resolution / 16;
-    uint32_t x_start = slot * slot_width;
-    for (uint32_t y = 0; y < strip_height && y < gi->vertical_resolution; y++)
-    {
-        for (uint32_t x = x_start; x < x_start + slot_width && x < gi->horizontal_resolution; x++)
-        {
-            gi->framebuffer[y * gi->pixels_per_scanline + x] = color;
-        }
-    }
-}
-
 void panic(const char *msg)
 {
     // If terminal isn't up yet, paint the FB so we don't die on a silent black screen
@@ -77,8 +55,7 @@ void panic(const char *msg)
     if (gi && gi->framebuffer)
     {
         struct framebuffer_pixel red = {.red = 0xff, .green = 0x00, .blue = 0x00, .reserved = 0};
-        // Start below the debug_mark strip so the last checkpoint reached stays visible
-        for (uint32_t y = DEBUG_MARK_STRIP_HEIGHT; y < gi->vertical_resolution; y++)
+        for (uint32_t y = 0; y < gi->vertical_resolution; y++)
         {
             for (uint32_t x = 0; x < gi->horizontal_resolution; x++)
             {
@@ -204,32 +181,17 @@ void kernel_main()
 
     screen_info = graphics_screen_info();
 
-    // slot 5: graphics_setup done, screen_info obtained
-    debug_mark(5, 0x00, 0xff, 0x00); // green
-
     // Enable interrupt descriptor table
     idt_init();
-
-    // slot 6: idt_init done
-    debug_mark(6, 0x00, 0x00, 0xff); // blue
 
     // Enable fs functionality
     fs_init();
 
-    // slot 7: fs_init done
-    debug_mark(7, 0x00, 0xff, 0xff); // cyan
-
     // Enable the disks
     disk_search_and_init();
 
-    // slot 8: disk_search_and_init done
-    debug_mark(8, 0xff, 0xa5, 0x00); // orange
-
     // Initialize GPT(gloabl partition table) drives
     gpt_init();
-
-    // slot 9: gpt_init done, about to enter font_system_init (slots 0-4)
-    debug_mark(9, 0xff, 0xff, 0xff); // white
 
     // Initialize the font system
     font_system_init();

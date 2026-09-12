@@ -27,8 +27,7 @@ struct disk
     size_t starting_lba;
     size_t ending_lba;
 
-    // Which legacy ATA position this disk lives at. Partitions inherit these
-    // from the physical disk they were found on.
+    // ATA position, partitions inherit these from their physical disk
     uint16_t io_base;
     uint16_t ctrl_base;
     uint8_t drive_select;

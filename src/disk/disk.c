@@ -33,7 +33,7 @@
 #define ATA_CMD_READ_PIO 0x20
 #define ATA_CMD_IDENTIFY 0xEC
 
-// Device control register bit: stop the drive raising INTRQ, we only poll
+// Stop the drive raising INTRQ, we only poll
 #define ATA_CTRL_NIEN 0x02
 
 #define PCI_CONFIG_ADDRESS 0xCF8
@@ -41,13 +41,11 @@
 #define PCI_CLASS_MASS_STORAGE 0x01
 #define PCI_SUBCLASS_IDE 0x01
 
-// prog-if bits: set means that channel runs in PCI native mode, so its ports
-// come from the BARs instead of the fixed ISA addresses
+// Set means channel is PCI native mode, ports come from BARs
 #define PCI_IDE_PRIMARY_NATIVE 0x01
 #define PCI_IDE_SECONDARY_NATIVE 0x04
 
-// Port I/O on the legacy ATA range runs at ISA speed (~1us per access), so these
-// counts work out to roughly 0.1s for a probe and ~1s for a transfer.
+// ISA I/O is ~1us/access, so these give ~0.1s probe, ~1s transfer
 #define ATA_TIMEOUT_PROBE 100000
 #define ATA_TIMEOUT_IO 1000000
 
@@ -61,8 +59,7 @@ struct disk *disk = NULL;
 // where kernel files are found
 struct disk *primary_fs_disk = NULL;
 
-// Selecting a drive needs ~400ns to settle before the controller reports valid
-// status. Four alternate-status reads is the standard way to burn that time.
+// Burns ~400ns for drive select to settle, per spec
 static void ata_io_delay(uint16_t ctrl_base)
 {
     for (int i = 0; i < 4; i++)
@@ -71,8 +68,7 @@ static void ata_io_delay(uint16_t ctrl_base)
     }
 }
 
-// 0xFF means nothing is driving the bus (no device at this position); without
-// this check the old code span forever on an empty channel.
+// 0xFF means empty channel, else old code hung forever
 static int ata_wait_not_busy(uint16_t io_base, int timeout)
 {
     for (int i = 0; i < timeout; i++)
@@ -130,8 +126,7 @@ static int ata_identify(uint16_t io_base, uint16_t ctrl_base, uint8_t drive_sele
         return -EIO;
     }
 
-    // A non-zero signature here means ATAPI, which aborts IDENTIFY and is not
-    // something we can read sectors from.
+    // Non-zero signature means ATAPI, we can't read sectors from it
     if (insb(io_base + ATA_REG_LBA_MID) != 0 || insb(io_base + ATA_REG_LBA_HI) != 0)
     {
         return -EIO;
@@ -142,7 +137,7 @@ static int ata_identify(uint16_t io_base, uint16_t ctrl_base, uint8_t drive_sele
         return -EIO;
     }
 
-    // Drain the identify block so the drive is left idle rather than mid-transfer
+    // Drain identify block so drive isn't left mid-transfer
     for (int i = 0; i < 256; i++)
     {
         insw(io_base + ATA_REG_DATA);
@@ -232,8 +227,6 @@ out:
     return res;
 }
 
-static int ata_drives_found = 0;
-
 static uint32_t pci_config_read32(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset)
 {
     uint32_t address = 0x80000000 | ((uint32_t)bus << 16) | ((uint32_t)slot << 11) | ((uint32_t)func << 8) | (offset & 0xFC);
@@ -253,10 +246,6 @@ static void disk_probe_channel(uint16_t io_base, uint16_t ctrl_base)
             continue;
         }
 
-        // slots 10-15: one green block per drive found
-        debug_mark(10 + ata_drives_found, 0x00, 0xff, 0x00);
-        ata_drives_found++;
-
         struct disk *found = NULL;
         if (disk_create_new(MARROWOS_DISK_TYPE_REAL, io_base, ctrl_base, drives[d], 0, 0, MARROWOS_SECTOR_SIZE, &found) < 0)
         {
@@ -270,9 +259,7 @@ static void disk_probe_channel(uint16_t io_base, uint16_t ctrl_base)
     }
 }
 
-// Real SATA controllers in "IDE mode" usually run in PCI native mode, where the
-// channels live at firmware-assigned ports rather than 0x1F0/0x170. QEMU's PIIX
-// reports legacy mode, which is why hardcoded ports only ever worked there.
+// Real hardware runs PCI native mode, QEMU fakes legacy ports
 static int disk_probe_pci_ide_controllers()
 {
     int controllers = 0;
@@ -307,7 +294,7 @@ static int disk_probe_pci_ide_controllers()
                 if (prog_if & PCI_IDE_PRIMARY_NATIVE)
                 {
                     primary_io = pci_config_read32(bus, slot, func, 0x10) & 0xFFFC;
-                    // Native control block is 4 bytes; alt-status/device-control sits at +2
+                    // Device-control reg sits at +2 in the native block
                     primary_ctrl = (pci_config_read32(bus, slot, func, 0x14) & 0xFFFC) + 2;
                 }
 

@@ -106,9 +106,7 @@ static int idt_exception_has_error_code(int exception)
 
 void idt_handle_exception(struct interrupt_frame *frame)
 {
-    // The CPU pushes an error code before RIP for some exceptions, which shifts
-    // the fields in struct interrupt_frame by one slot, so read the raw words.
-    // Layout: 8 GPRs pushed by the stub, then [error code], RIP, CS, RFLAGS, RSP, SS
+    // Some exceptions push an error code, shifting the frame by one word
     uint64_t words[14];
     memcpy(words, (void *)frame, sizeof(words));
     int has_error_code = idt_exception_has_error_code(current_interrupt);
@@ -140,8 +138,7 @@ void idt_handle_exception(struct interrupt_frame *frame)
     p = idt_append_str(p, itoa((int)kernel_minimal_heap.total_blocks));
     p = idt_append_str(p, " BLOCKS\nSTACK");
 
-    // No frame pointers (-fomit-frame-pointer), so list anything on the stack
-    // that looks like a kernel address; the callers are among them.
+    // No frame pointers, so just scan stack for kernel-looking addresses
     uint64_t *stack = (uint64_t *)fault_rsp;
     int shown = 0;
     for (int i = 0; i < 64 && shown < 8; i++)
