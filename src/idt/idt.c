@@ -31,20 +31,15 @@ static int current_interrupt = -1;
 void interrupt_handler(int interrupt, struct interrupt_frame *frame)
 {
     kernel_page();
-    current_interrupt = interrupt;
     if (interrupt_callbacks[interrupt] != 0)
     {
-        if (task_current())
-        {
-            task_current_save_state(frame);
-        }
+        // task_current_save_state(frame);
         interrupt_callbacks[interrupt](frame);
     }
-    if (task_current())
-    {
-        task_page();
-    }
+
+    // task_page();
     outb(0x20, 0x20);
+    outb(0xA0, 0x20);
 }
 
 void idt_zero_handler()
@@ -58,6 +53,7 @@ void idt_zero_handler()
 void no_interrupt_handler()
 {
     outb(0x20, 0x20);
+    outb(0xA0, 0x20);
 }
 
 void idt_set(int interrupt_no, void *address)
@@ -157,10 +153,9 @@ void idt_handle_exception(struct interrupt_frame *frame)
 void idt_clock()
 {
     outb(0x20, 0x20);
-    if (task_current())
-    {
-        task_next();
-    }
+
+    print("test\n");
+    task_next();
 }
 
 void idt_init()

@@ -1,7 +1,8 @@
 #include "mouse/mouse.h"
+#include "mouse/ps2mouse.h"
 #include "lib/vector/vector.h"
 #include "graphics/graphics.h"
-#include "graphics/window.h"
+#include "graphics/windows.h"
 #include "kernel.h"
 #include "status.h"
 
@@ -11,7 +12,12 @@ struct vector *mouse_driver_vector = NULL;
 int mouse_system_load_static_drivers()
 {
     int res = 0;
-    // TODO: Register the ps2_mouse;
+    res = mouse_register(ps2_mouse_get());
+    if (res < 0)
+    {
+        goto out;
+    }
+out:
     return res;
 }
 

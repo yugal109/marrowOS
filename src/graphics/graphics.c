@@ -289,7 +289,7 @@ void graphics_redraw_region(struct graphics_info *g, uint32_t local_x, uint32_t 
         // Compute the intersection between the childs rectangle and the draw region
         uint32_t intersect_left = MAX(child_abs_left, region_abs_left);
         uint32_t intersect_top = MAX(child_abs_top, region_abs_top);
-        uint32_t intersect_right = MAX(child_abs_right, region_abs_right);
+        uint32_t intersect_right = MIN(child_abs_right, region_abs_right);
         uint32_t intersect_bottom = MIN(child_abs_bottom, region_abs_bottom);
 
         if (intersect_right > intersect_left && intersect_bottom > intersect_top)

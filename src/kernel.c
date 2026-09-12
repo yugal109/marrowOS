@@ -26,6 +26,7 @@
 #include "status.h"
 #include "isr80h/isr80h.h"
 #include "keyboard/keyboard.h"
+#include "mouse/mouse.h"
 #include "config.h"
 
 struct terminal *system_terminal = NULL;
@@ -200,8 +201,14 @@ void kernel_main()
     // Setup the terminal system
     terminal_system_setup();
 
+    // initialize mouse system
+    mouse_system_init();
+
     // intitalize window system
     window_system_initialize();
+
+    // load the statis mouse dirvers
+    mouse_system_load_static_drivers();
 
     // in no particular order.
     // initialize graphics stage two
@@ -270,12 +277,13 @@ void kernel_main()
     //     // supresses warnings.
     // }
 
-      struct window *win = window_create(graphics_screen_info(), NULL, "Test Window", 100, 100, 200, 200, 0, -1);
+    struct window *win = window_create(graphics_screen_info(), NULL, "Test Window", 100, 100, 200, 200, 0, -1);
     if (!win)
     {
         print("Window creation issue\n");
     }
 
+    enable_interrupts();
     while (1)
     {
     }
