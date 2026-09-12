@@ -333,6 +333,11 @@ out:
     return res;
 }
 
+void window_redraw(struct window *window)
+{
+    graphics_redraw(window->root_graphics);
+}
+
 struct window *window_create(struct graphics_info *graphics_info, struct font *font, const char *title, size_t x, size_t y, size_t width, size_t height, int flags, int id)
 {
     int res = 0;

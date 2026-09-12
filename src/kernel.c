@@ -270,10 +270,14 @@ void kernel_main()
     //     // supresses warnings.
     // }
 
-    for (size_t i = 0; i < 10; i++)
+      struct window *win = window_create(graphics_screen_info(), NULL, "Test Window", 100, 100, 200, 200, 0, -1);
+    if (!win)
     {
-        print("Another second\n");
-        udelay(1000000);
+        print("Window creation issue\n");
+    }
+
+    while (1)
+    {
     }
 
     print("Loading program...\n");
