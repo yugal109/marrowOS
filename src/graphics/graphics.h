@@ -14,7 +14,6 @@ enum
     GRAPHICS_FLAG_CLONED_CHILDREN = 0b00000100,                    // children list is shared, not owned
     GRAPHICS_FLAG_DO_NOT_COPY_PIXELS = 0b00001000,                 // clone shell only, skip pixel data
     GRAPHICS_FLAG_DO_NOT_OVERWRITE_TRANSPARENT_PIXELS = 0b00010000 // paste: don't stomp transparent dest pixels
-
 };
 
 struct graphics_info;
@@ -123,5 +122,6 @@ void graphics_draw_image_scaled(struct graphics_info *graphics_info, struct imag
                                 int x, int y, uint32_t dest_w, uint32_t dest_h);
 void graphics_redraw_region(struct graphics_info *g, uint32_t local_x, uint32_t local_y, uint32_t width, uint32_t height);
 void graphics_redraw_graphics_to_screen(struct graphics_info *relative_graphics, uint32_t rel_x, uint32_t rel_y, uint32_t width, uint32_t height);
+void graphics_info_recalculate(struct graphics_info *graphics_info);
 
 #endif
