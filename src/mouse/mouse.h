@@ -57,15 +57,15 @@ struct mouse
 };
 
 int mouse_system_load_static_drivers();
-void mouse_draw(struct mouse* mouse);
-void mouse_register_click_handler(struct mouse* mouse, MOUSE_CLICK_EVENT_HANDLER_FUNCTION click_handler);
-void mouse_register_move_handler(struct mouse* mouse, MOUSE_MOVE_EVENT_HANDLER_FUNCTION move_handler);
-void mouse_unregister_click_handler(struct mouse* mouse, MOUSE_CLICK_EVENT_HANDLER_FUNCTION click_handler);
-void mouse_unregister_move_handler(struct mouse* mouse, MOUSE_MOVE_EVENT_HANDLER_FUNCTION move_handler);
-void mouse_moved(struct mouse* mouse);
-void mouse_click(struct mouse* mouse, MOUSE_CLICK_TYPE type);
-void mouse_position_set(struct mouse* mouse, size_t x, size_t y);
-int mouse_register(struct mouse* mouse);
+void mouse_draw(struct mouse *mouse);
+void mouse_register_click_handler(struct mouse *mouse, MOUSE_CLICK_EVENT_HANDLER_FUNCTION click_handler);
+void mouse_register_move_handler(struct mouse *mouse, MOUSE_MOVE_EVENT_HANDLER_FUNCTION move_handler);
+void mouse_unregister_click_handler(struct mouse *mouse, MOUSE_CLICK_EVENT_HANDLER_FUNCTION click_handler);
+void mouse_unregister_move_handler(struct mouse *mouse, MOUSE_MOVE_EVENT_HANDLER_FUNCTION move_handler);
+void mouse_moved(struct mouse *mouse);
+void mouse_click(struct mouse *mouse, MOUSE_CLICK_TYPE type);
+void mouse_position_set(struct mouse *mouse, size_t x, size_t y);
+int mouse_register(struct mouse *mouse);
 int mouse_system_init();
 
 #endif

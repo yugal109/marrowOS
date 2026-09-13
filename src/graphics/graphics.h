@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
+#include "mouse/mouse.h"
 
 #include "lib/vector/vector.h"
 #include "graphics/image/image.h"
@@ -123,5 +124,14 @@ void graphics_draw_image_scaled(struct graphics_info *graphics_info, struct imag
 void graphics_redraw_region(struct graphics_info *g, uint32_t local_x, uint32_t local_y, uint32_t width, uint32_t height);
 void graphics_redraw_graphics_to_screen(struct graphics_info *relative_graphics, uint32_t rel_x, uint32_t rel_y, uint32_t width, uint32_t height);
 void graphics_info_recalculate(struct graphics_info *graphics_info);
+
+struct graphics_info *graphics_get_at_screen_position(size_t x, size_t y, struct graphics_info *ignored, bool top_first);
+struct graphics_info *graphics_get_child_at_position(struct graphics_info *graphics,
+                                                     size_t x, size_t y,
+                                                     struct graphics_info *ignored,
+                                                     bool top_first);
+
+void graphics_click_handler_set(struct graphics_info *graphics, GRAPHICS_MOUSE_CLICK_FUNCTION click_function);
+void graphics_move_handler_set(struct graphics_info *graphics, GRAPHICS_MOUSE_MOVE_FUNCTION move_function);
 
 #endif

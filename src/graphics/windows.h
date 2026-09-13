@@ -105,11 +105,13 @@ int window_system_initialize_stage2();
 void window_set_z_index(struct window *window, int zindex);
 void window_unfocus(struct window *old_focused_window);
 void window_focus(struct window *window);
+void window_click(struct window *window, int rel_x, int rel_y, MOUSE_CLICK_TYPE type);
 struct window *window_create(struct graphics_info *graphics_info, struct font *font, const char *title, size_t x, size_t y, size_t width, size_t height, int flags, int id);
 void window_event_handler_register(struct window *window, WINDOW_EVENT_HANDLER handler);
 void window_event_handler_unregister(struct window *window, WINDOW_EVENT_HANDLER handler);
 int window_position_set(struct window *window, size_t new_x, size_t new_y);
 void window_redraw(struct window *window);
 struct terminal *window_terminal(struct window *window);
+void window_click(struct window *window, int rel_x, int rel_y, MOUSE_CLICK_TYPE type);
 
 #endif
