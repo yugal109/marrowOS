@@ -307,7 +307,7 @@ void graphics_redraw_region(struct graphics_info *g, uint32_t local_x, uint32_t 
 
     if (local_x + width > g->width)
     {
-        return;
+        width = g->width - local_x;
     }
     if (local_y + height > g->height)
     {
@@ -372,7 +372,7 @@ void graphics_ignore_color(struct graphics_info *graphics_info, struct framebuff
 
 void graphics_transparency_key_set(struct graphics_info *graphics_info, struct framebuffer_pixel pixel_color)
 {
-    graphics_info->ignore_color = pixel_color;
+    graphics_info->transparency_key = pixel_color;
 }
 
 void graphics_transparency_key_remove(struct graphics_info *graphics_info)
@@ -532,7 +532,7 @@ struct graphics_info *graphics_get_child_at_position(struct graphics_info *graph
 
     // If no child qualifies then if the current element contains the point
     // return it.
-    if (x >= graphics->starting_x && x < graphics->starting_y + graphics->width &&
+    if (x >= graphics->starting_x && x < graphics->starting_x + graphics->width &&
         y >= graphics->starting_y && y < graphics->starting_y + graphics->height)
     {
         return graphics;
@@ -858,10 +858,27 @@ void graphics_setup(struct graphics_info *main_graphics_info)
     // Load the image formats.
     graphics_image_formats_init();
 
+    // redraw all the graphics
     graphics_redraw_all();
 }
 
-void grpahics_setup_stage_two(struct graphics_info *main_graphics_info)
+bool graphics_has_ancestor(struct graphics_info *graphics_child, struct graphics_info *graphics_ancestor)
+{
+    struct graphics_info *parent = graphics_child->parent;
+    while (parent)
+    {
+        if (parent == graphics_ancestor)
+        {
+            return true;
+        }
+
+        parent = parent->parent;
+    }
+
+    return false;
+}
+
+void graphics_setup_stage_two(struct graphics_info *main_graphics_info)
 {
     mouse_register_click_handler(NULL, graphics_mouse_click_handler);
 }

@@ -26,6 +26,9 @@ struct window *focused_window = NULL;
 
 int window_autoincrement_id_current = 100000;
 
+size_t window_get_largest_zindex();
+int window_recalculate_zindexes();
+
 int window_system_initialize()
 {
     int res = 0;
@@ -53,8 +56,42 @@ out:
 
 void window_screen_mouse_move_handler(struct mouse *mouse, int moved_to_x, int moved_to_y)
 {
-    // TODO.
+    if (window_moving)
+    {
+        if (window_moving->title_bar_graphics)
+        {
+            size_t abs_x = moved_to_x - (window_moving->title_bar_graphics->width / 2);
+            size_t abs_y = moved_to_y - (window_moving->title_bar_graphics->height / 2);
+            window_position_set(window_moving, abs_x, abs_y);
+        }
+
+        size_t rel_x = moved_to_x - window_moving->root_graphics->starting_x;
+        size_t rel_y = moved_to_y - window_moving->root_graphics->starting_y;
+
+        struct window_event event = {0};
+        event.type = WINDOW_EVENT_TYPE_MOUSE_MOVE;
+        event.data.move.x = rel_x;
+        event.data.move.y = rel_y;
+        window_event_push(window_moving, &event);
+    }
 }
+
+struct window *window_get_from_graphics(struct graphics_info *graphics)
+{
+    struct window *window = NULL;
+    size_t total_windows = vector_count(windows_vector);
+    for (size_t i = 0; i < total_windows; i++)
+    {
+        struct window *win = NULL;
+        vector_at(windows_vector, i, &win, sizeof(win));
+        if (win && window_owns_graphics(win, graphics))
+        {
+            window = win;
+            break;
+        }
+    }
+    return window;
+};
 
 struct window *window_get_at_position(size_t abs_x, size_t abs_y, struct window *ignore_window)
 {
@@ -159,7 +196,9 @@ void window_unfocus(struct window *old_focused_window)
     window_draw_title_bar(old_focused_window, black);
     graphics_redraw_region(graphics_screen_info(), old_focused_window->root_graphics->starting_x, old_focused_window->root_graphics->starting_y, old_focused_window->root_graphics->width, old_focused_window->root_graphics->height);
 
-    // TODO: SETUP A UNFOCUS EVENT
+    struct window_event event = {0};
+    event.type = WINDOW_EVENT_TYPE_FOCUS;
+    window_event_push(old_focused_window, &event);
 }
 
 void window_bring_to_top(struct window *window)
@@ -216,6 +255,10 @@ void window_focus(struct window *window)
 
     // Force a full redraw of the window
     graphics_redraw_graphics_to_screen(window->root_graphics, 0, 0, window->root_graphics->width, window->root_graphics->height);
+
+    struct window_event event = {0};
+    event.type = WINDOW_EVENT_TYPE_FOCUS;
+    window_event_push(window, &event);
 }
 
 void window_event_handler_unregister(struct window *window, WINDOW_EVENT_HANDLER handler)
@@ -395,6 +438,116 @@ void window_redraw(struct window *window)
     graphics_redraw(window->root_graphics);
 }
 
+void window_redraw_body_region(struct window *window, int x, int y, int width, int height)
+{
+    graphics_redraw_region(window->graphics, x, y, width, height);
+}
+
+void window_redraw_region(struct window *window, int x, int y, int width, int height)
+{
+    graphics_redraw_region(window->root_graphics, x, y, width, height);
+}
+
+void window_title_set(struct window *window, const char *title)
+{
+    strncpy(window->title, title, sizeof(window->title));
+
+    // black
+    struct framebuffer_pixel title_bar_bg_color = {0};
+
+    window_draw_title_bar(window, title_bar_bg_color);
+    window_redraw(window);
+}
+
+size_t window_get_largest_zindex()
+{
+    size_t z_index = 0;
+    size_t total_windows = vector_count(windows_vector);
+    if (total_windows > 0)
+    {
+        struct window *win = NULL;
+        vector_at(windows_vector, 0, &win, sizeof(win));
+        if (win)
+        {
+            z_index = win->zindex;
+        }
+    }
+
+    return z_index;
+}
+
+int window_recalculate_zindexes()
+{
+    size_t total_windows = vector_count(windows_vector);
+    size_t last_zindex = 0;
+    for (size_t i = 0; i < total_windows; i++)
+    {
+        struct window *child_window = NULL;
+        vector_at(windows_vector, i, &child_window, sizeof(child_window));
+        if (child_window)
+        {
+            size_t z_index = vector_count(child_window->root_graphics->children) + i + 1;
+            graphics_set_z_index(child_window->root_graphics, z_index);
+            last_zindex = z_index;
+        }
+    }
+
+    return last_zindex;
+}
+
+struct window *window_focused()
+{
+    return focused_window;
+}
+
+bool window_owns_graphics(struct window *win, struct graphics_info *graphics)
+{
+    if (graphics == win->root_graphics)
+        return true;
+
+    return graphics_has_ancestor(graphics, win->root_graphics);
+}
+
+void window_title_bar_mouse_moved(struct graphics_info *title_graphics, size_t rel_x, size_t rel_y, size_t abs_x, size_t abs_y)
+{
+    // do nothing
+}
+
+void window_title_bar_clicked(struct graphics_info *title_graphics, size_t rel_x, size_t rel_y, MOUSE_CLICK_TYPE type)
+{
+    struct window *win = window_get_from_graphics(title_graphics);
+    if (win)
+    {
+        size_t close_btn_x = win->title_bar_components.close_btn.x;
+        size_t close_btn_y = win->title_bar_components.close_btn.y;
+        size_t close_btn_width = win->title_bar_components.close_btn.width;
+        size_t close_btn_height = win->title_bar_components.close_btn.height;
+        size_t close_btn_ending_x = close_btn_x + close_btn_width;
+        size_t close_btn_ending_y = close_btn_y + close_btn_height;
+        if (rel_x >= close_btn_x &&
+            rel_x < close_btn_ending_x &&
+            rel_y >= close_btn_y &&
+            rel_y < close_btn_ending_y)
+        {
+            window_close(win);
+            win = NULL;
+        }
+        else
+        {
+            // if they click the window they are already moving ,toggle it as no longer moving.
+            if (window_moving == win)
+            {
+                window_moving = NULL;
+            }
+            else
+            {
+                //  this was not the currently moving window ,thus set the new moving window to the one we clicked.
+                window_moving = win;
+            }
+        }
+    }
+}
+
 struct window *window_create(struct graphics_info *graphics_info, struct font *font, const char *title, size_t x, size_t y, size_t width, size_t height, int flags, int id)
 {
     int res = 0;
@@ -485,8 +638,13 @@ struct window *window_create(struct graphics_info *graphics_info, struct font *f
             res = -ENOMEM;
             goto out;
         }
+
         // click handler
+        graphics_click_handler_set(title_bar_graphics_info, window_title_bar_clicked);
+
         // move handler
+        graphics_move_handler_set(title_bar_graphics_info, window_title_bar_mouse_moved);
+
         window->title_bar_graphics = title_bar_graphics_info;
 
         border_left_graphics_info =

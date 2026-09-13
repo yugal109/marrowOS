@@ -210,6 +210,9 @@ void kernel_main()
     // load the statis mouse dirvers
     mouse_system_load_static_drivers();
 
+    // initialize stage two graphics setup
+    graphics_setup_stage_two(&default_graphics_info);
+
     // in no particular order.
     // initialize graphics stage two
     // initialize mouse system
