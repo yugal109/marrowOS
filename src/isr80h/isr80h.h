@@ -19,6 +19,7 @@ enum Systemcommands
     SYSTEM_COMMAND13_FSEEK,
     SYSTEM_COMMAND14_FSTAT,
     SYSTEM_COMMAND15_REALLOC,
+    SYSTEM_COMMAND16_WINDOW_CREATE,
 };
 
 void isr80h_register_commands();

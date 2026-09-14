@@ -17,6 +17,7 @@ global marrowos_fread: function
 global marrowos_fseek: function
 global marrowos_fstat: function
 global marrowos_realloc: function
+global marrowos_window_create: function
 
 ; void print(const char* message)
 print:
@@ -140,4 +141,19 @@ marrowos_realloc:
     push qword rdi  ; old_ptr
     int 0x80
     add rsp, 16 ; RAX = new the pointer address
+    ret
+
+; void* marrowos_window_create(const char* title, long width, long height, long flags, long id)
+peachos_window_create:
+    mov rax, 16
+    push qword R8
+    push qword rcx
+    push qword rdx
+    push qword rsi
+    push qword rdi
+    int 0x80
+    ; restore the stack
+    add rsp, 40
+
+    ; RAX = contains the return result
     ret
