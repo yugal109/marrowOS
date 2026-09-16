@@ -72,5 +72,7 @@ void *marrowos_realloc(void *old_ptr, size_t new_size);
 struct window *marrowos_window_create(const char *title, long width, long height, long flags, long id);
 void marrowos_divert_stdout_to_window(struct window *window);
 int marrowos_process_get_window_event(struct window_event *event);
+void *marrowos_window_get_graphics(struct window *window);
+void *marrowos_graphic_pixels_get(void *graphics);
 
 #endif

@@ -5,6 +5,7 @@
 #include "process.h"
 #include "io.h"
 #include "file.h"
+#include "graphics.h"
 #include "window.h"
 
 void isr80h_register_commands()
@@ -28,4 +29,6 @@ void isr80h_register_commands()
     isr80h_register_command(SYSTEM_COMMAND16_WINDOW_CREATE, isr80h_command16_window_create);
     isr80h_register_command(SYSTEM_COMMAND17_SYSOUT_TO_WINDOW, isr80h_command17_sysout_to_window);
     isr80h_register_command(SYSTEM_COMMAND18_GET_WINDOW_EVENT, isr80h_command18_get_window_event);
+    isr80h_register_command(SYSTEM_COMMAND19_WINDOW_GRAPHICS_GET, isr80h_command19_window_graphics_get);
+    isr80h_register_command(SYSTEM_COMMAND20_GRAPHICS_PIXELS_BUFFER_GET, isr80h_command20_graphics_pixels_get);
 }
