@@ -1,13 +1,13 @@
 [BITS 64]
 
 section .asm
-global print:function
-global marrowos_getkey:function
-global marrowos_malloc:function
-global marrowos_free:function
-global marrowos_putchar:function
-global marrowos_process_load_start:function
-global marrowos_process_get_arguments:function
+global print:   function
+global marrowos_getkey: function
+global marrowos_malloc: function
+global marrowos_free:   function
+global marrowos_putchar:    function
+global marrowos_process_load_start: function
+global marrowos_process_get_arguments:  function
 global marrowos_system: function
 global marrowos_exit: function
 global marrowos_fopen: function
@@ -20,9 +20,12 @@ global marrowos_realloc: function
 global marrowos_window_create: function
 global marrowos_divert_stdout_to_window: function
 global marrowos_process_get_window_event:function
-global marrowos_window_get_graphics:function
-global marrowos_graphic_pixels_get:function
-global marrowos_window_redraw:function
+global marrowos_window_get_graphics: function
+global marrowos_graphic_pixels_get: function
+global marrowos_window_redraw:  function
+global marrowos_graphics_create:    function
+global marrowos_window_redraw_region: function
+global marrowos_window_title_set:function
 
 
 ; void print(const char* message)
@@ -205,4 +208,39 @@ marrowos_window_redraw:
     push qword rdi ; push window pointer
     int 0x80
     add rsp, 8 
+    ret
+
+; void* marrowos_graphics_create(size_t x, size_t y, size_t width, size_t height, void* parent_graphics);
+marrowos_graphics_create:
+    mov rax, 22 ; command 22 - create relative graphics
+    push qword rdi ; x
+    push qword rsi ; y
+    push qword rdx ; width
+    push qword rcx ; height
+    push qword r8 ; parent graphics
+    int 0x80
+    add rsp, 40 ; restore the stack
+    ; rax = contain the new graphics metadata
+    ret
+
+; void marrowos_window_redraw_region(long rel_x, long rel_y, long rel_width, long rel_height, struct window* window);
+marrowos_window_redraw_region:
+    mov rax, 23 ; command 23 redraw region on window
+    push qword r8 ; window
+    push qword rcx ; rel_height
+    push qword rdx ; rel_width
+    push qword rsi ; rel_y
+    push qword rdi ; rel_x
+    int 0x80
+    add rsp, 40 ; restore stack
+    ret
+
+; void marrowos_window_title_set(struct window* window, const char* title)
+marrowos_window_title_set:
+    mov rax, 24  ; update window
+    push qword rsi ; title
+    push qword rdi ; window
+    push qword 0 ; update type
+    int 0x80 
+    add rsp, 24 ; restore the stack
     ret

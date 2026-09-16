@@ -74,6 +74,9 @@ void marrowos_divert_stdout_to_window(struct window *window);
 int marrowos_process_get_window_event(struct window_event *event);
 void *marrowos_window_get_graphics(struct window *window);
 void *marrowos_graphic_pixels_get(void *graphics);
+void *marrowos_graphics_create(size_t x, size_t y, size_t width, size_t height, void *parent_graphics);
 void marrowos_window_redraw(struct window *window);
+void marrowos_window_title_set(struct window *window, const char *title);
+void marrowos_window_redraw_region(long rel_x, long rel_y, long rel_width, long rel_height, struct window *window);
 
 #endif
