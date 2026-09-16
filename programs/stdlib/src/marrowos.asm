@@ -19,6 +19,7 @@ global marrowos_fstat: function
 global marrowos_realloc: function
 global marrowos_window_create: function
 global marrowos_divert_stdout_to_window: function
+global marrowos_process_get_window_event:function
 
 ; void print(const char* message)
 print:
@@ -165,4 +166,13 @@ marrowos_divert_stdout_to_window:
     push qword rdi; POinter to userland window
     int 0x80
     add rsp,8
+    ret
+
+; int marrowos_process_get_window_event(struct window_event* event);
+marrowos_process_get_window_event:
+    mov rax, 18 ; Command 18 get window event
+    push qword rdi ; The pointer to the window event
+    int 0x80
+    add rsp, 8
+    ; rax < 0 means error or no event
     ret

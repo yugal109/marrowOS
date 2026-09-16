@@ -24,6 +24,7 @@ int process_get_allocation_by_start_addr(struct process *process, void *addr, st
 
 int process_free_process(struct process *process);
 int process_close_file_handles(struct process *process);
+void process_window_closed(struct process *process, struct process_window *proc_win);
 
 void *process_virtual_address_to_physical(struct process *process, void *virt_addr)
 {

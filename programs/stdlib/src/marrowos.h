@@ -3,6 +3,37 @@
 #include <stddef.h>
 #include <stdbool.h>
 
+// temporary: until we implement the GUI SDK
+struct window_event
+{
+    int type;
+    int win_id;
+    void *window;
+
+    union
+    {
+        struct
+        {
+            // empty no properties
+        } focus;
+
+        // positions are relative to the window body
+        struct
+        {
+            int x;
+            int y;
+        } move;
+
+        // relative to the window body.
+        struct
+        {
+            int x;
+            int y;
+        } click;
+
+    } data;
+};
+
 struct command_argument
 {
     char argument[512];
@@ -40,5 +71,6 @@ long marrowos_fstat(long fd, struct file_stat *file_stat_out);
 void *marrowos_realloc(void *old_ptr, size_t new_size);
 struct window *marrowos_window_create(const char *title, long width, long height, long flags, long id);
 void marrowos_divert_stdout_to_window(struct window *window);
+int marrowos_process_get_window_event(struct window_event *event);
 
 #endif

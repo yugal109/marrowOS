@@ -22,20 +22,16 @@ int main(int argc, char **argv)
     // we want all printfs to go to the window
     marrowos_divert_stdout_to_window(win);
 
-    int fd = fopen("@:/blank.elf", "r");
-    if (fd > 0)
-    {
-        struct file_stat file_stat = {0};
-        printf("File blank.elf opened\n");
-        fstat(fd, &file_stat);
-        printf("FIle size: %i\n", file_stat.filesize);
-        fclose(fd);
-    }
-    else
+    while (1)
     {
         printf("File blank.elf opened failed\n");
+        struct window_event window_event = {0};
+        int res = marrowos_process_get_window_event(&window_event);
+        if (res >= 0)
+        {
+            printf("event type: %i\n", window_event.type);
+        }
     }
-
     while (1)
     {
     }
