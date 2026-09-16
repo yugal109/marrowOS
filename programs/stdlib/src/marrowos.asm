@@ -22,6 +22,8 @@ global marrowos_divert_stdout_to_window: function
 global marrowos_process_get_window_event:function
 global marrowos_window_get_graphics:function
 global marrowos_graphic_pixels_get:function
+global marrowos_window_redraw:function
+
 
 ; void print(const char* message)
 print:
@@ -193,6 +195,14 @@ marrowos_window_get_graphics:
 marrowos_graphic_pixels_get:
     mov rax, 20   ; Gets the pixel array pointer of a graphic entity
     push qword rdi ; push the graphics ptr.
+    int 0x80
+    add rsp, 8 
+    ret
+
+; void peachos_window_redraw(struct window* window);
+marrowos_window_redraw:
+    mov rax, 21 ; Redraws the window
+    push qword rdi ; push window pointer
     int 0x80
     add rsp, 8 
     ret

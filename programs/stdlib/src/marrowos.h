@@ -74,5 +74,6 @@ void marrowos_divert_stdout_to_window(struct window *window);
 int marrowos_process_get_window_event(struct window_event *event);
 void *marrowos_window_get_graphics(struct window *window);
 void *marrowos_graphic_pixels_get(void *graphics);
+void marrowos_window_redraw(struct window *window);
 
 #endif

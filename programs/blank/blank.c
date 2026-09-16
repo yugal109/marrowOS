@@ -11,6 +11,26 @@ struct window
     int height;
 };
 
+struct framebuffer_pixel
+{
+    uint8_t blue;
+    uint8_t green;
+    uint8_t red;
+    uint8_t reserved;
+};
+
+struct userland_graphics
+{
+    size_t x;
+    size_t y;
+    size_t width;
+    size_t height;
+
+    void *pixels;
+
+    void *userland_ptr;
+};
+
 int main(int argc, char **argv)
 {
     struct window *win = marrowos_window_create("Hello world", 200, 200, 0, 0);
@@ -19,8 +39,26 @@ int main(int argc, char **argv)
         printf("all okay\n");
     }
 
-    // we want all printfs to go to the window
     marrowos_divert_stdout_to_window(win);
+
+    struct userland_graphics *graphics = marrowos_window_get_graphics(win);
+    if (!graphics)
+    {
+        printf("No graphics\n");
+        return -1;
+    }
+
+    struct framebuffer_pixel *pixels = marrowos_graphic_pixels_get(graphics);
+    struct framebuffer_pixel blue = {.blue = 0xff, .red = 0x00, .green = 0x00};
+    for (size_t x = 0; x < graphics->width; x++)
+    {
+        for (size_t y = 0; y < graphics->height; y++)
+        {
+            pixels[y * graphics->width + x] = blue;
+        }
+    }
+
+    marrowos_window_redraw(win);
 
     while (1)
     {
