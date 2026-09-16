@@ -18,6 +18,7 @@ global marrowos_fseek: function
 global marrowos_fstat: function
 global marrowos_realloc: function
 global marrowos_window_create: function
+global marrowos_divert_stdout_to_window: function
 
 ; void print(const char* message)
 print:
@@ -156,4 +157,12 @@ marrowos_window_create:
     add rsp, 40
 
     ; RAX = contains the return result
+    ret
+
+; void marrowos_divert_stdout_to_window(struct window* window)
+marrowos_divert_stdout_to_window:
+    mov rax,17; Command 17 - divert stdout to window
+    push qword rdi; POinter to userland window
+    int 0x80
+    add rsp,8
     ret

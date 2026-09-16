@@ -39,5 +39,6 @@ long marrowos_fseek(long fd, long offset, long whence);
 long marrowos_fstat(long fd, struct file_stat *file_stat_out);
 void *marrowos_realloc(void *old_ptr, size_t new_size);
 struct window *marrowos_window_create(const char *title, long width, long height, long flags, long id);
+void marrowos_divert_stdout_to_window(struct window *window);
 
 #endif

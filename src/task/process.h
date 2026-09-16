@@ -10,9 +10,12 @@
 #define PROCESS_FILE_TYPE_ELF 0
 #define PROCESS_FILE_TYPE_BINARY 1
 
+#define PROCESS_MAX_WINDOW_EVENTS_RECORDED 1000
+
 typedef unsigned char PROCESS_FILE_TYPE;
 struct window;
 struct graphics_info;
+struct window_event;
 
 struct process_allocation
 {
@@ -125,8 +128,18 @@ struct process
     // a vector of struct process_window*
     struct vector *windows;
 
+    struct
+    {
+        struct vector *vector;
+        size_t index;
+        size_t total_unpopped;
+    } window_events;
+
     // The arguments of the process
     struct process_arguments arguments;
+
+    // system output window
+    struct process_window *sysout_win;
 };
 
 int process_load_for_slot(const char *filename, struct process **process, int process_slot);
@@ -153,5 +166,11 @@ bool process_owns_kernel_window(struct process *process, struct window *kernel_w
 struct process *process_get_from_kernel_window(struct window *window);
 struct process_window *process_window_get_from_user_window(struct process *process, struct process_userspace_window *user_win);
 void process_close_windows(struct process *process);
+void process_window_closed(struct process *process, struct process_window *proc_win);
+void process_print_char(struct process *process, char c);
+void process_print(struct process *process, const char *message);
+void process_set_sysout_window(struct process *process, struct process_window *win);
+int process_push_window_event(struct process *process, struct window_event *event);
+int process_pop_window_event(struct process *process, struct window_event *event_out);
 
 #endif

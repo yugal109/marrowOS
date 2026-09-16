@@ -20,6 +20,7 @@ enum Systemcommands
     SYSTEM_COMMAND14_FSTAT,
     SYSTEM_COMMAND15_REALLOC,
     SYSTEM_COMMAND16_WINDOW_CREATE,
+    SYSTEM_COMMAND17_SYSOUT_TO_WINDOW,
 };
 
 void isr80h_register_commands();
