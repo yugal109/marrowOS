@@ -26,6 +26,7 @@ global marrowos_window_redraw:  function
 global marrowos_graphics_create:    function
 global marrowos_window_redraw_region: function
 global marrowos_window_title_set:function
+global marrowos_window_cursor_set:function
 
 
 ; void print(const char* message)
@@ -241,6 +242,17 @@ marrowos_window_title_set:
     push qword rsi ; title
     push qword rdi ; window
     push qword 0 ; update type
-    int 0x80 
+    int 0x80
     add rsp, 24 ; restore the stack
+    ret
+
+; void marrowos_window_cursor_set(struct window* window, long rel_x, long rel_y)
+marrowos_window_cursor_set:
+    mov rax, 24   ; update window
+    push qword rdx ; rel_y
+    push qword rsi ; rel_x
+    push qword rdi ; window
+    push qword 1  ; update type = ISR80H_WINDOW_UPDATE_CURSOR_POSITION
+    int 0x80
+    add rsp, 32 ; restore the stack
     ret

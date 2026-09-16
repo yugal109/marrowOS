@@ -216,6 +216,15 @@ out:
     return res;
 }
 
+// Converts a click's position (relative to the terminal's own body, in
+// pixels) into the grid cell it landed on and moves the cursor there.
+int terminal_cursor_set_from_pixel(struct terminal *terminal, int rel_x, int rel_y)
+{
+    int col = rel_x / terminal->font->bits_width_per_character;
+    int row = rel_y / terminal->font->bits_height_per_character;
+    return terminal_cursor_set(terminal, row, col);
+}
+
 int terminal_cursor_row(struct terminal *terminal)
 {
     return terminal->text.row;
@@ -326,7 +335,8 @@ int terminal_backspace(struct terminal *terminal)
 
 int terminal_write(struct terminal *terminal, int c)
 {
-    if (c == '\n')
+    // The Enter key's scancode maps to carriage return (0x0d), not '\n'
+    if (c == '\n' || c == '\r')
     {
         terminal_handle_newline(terminal);
         return 0;
@@ -370,7 +380,7 @@ out:
 
 void terminal_transparency_key_set(struct terminal *terminal, struct framebuffer_pixel pixel_color)
 {
-    graphics_transparency_key_remove(terminal->graphics_info);
+    graphics_transparency_key_set(terminal->graphics_info, pixel_color);
 }
 
 void terminal_transparency_key_remove(struct terminal *terminal)

@@ -1,4 +1,5 @@
 #include "graphics.h"
+#include <stdbool.h>
 #include "kernel.h"
 #include "memory/paging/paging.h"
 #include "graphics/image/image.h"
@@ -148,30 +149,28 @@ void graphics_paste_pixels_to_framebuffer(
     if (clipped_w == 0 || clipped_h == 0)
         return;
 
+    // Whether this source has a transparency key at all is the same answer
+    // for every pixel in this blit, so decide it once instead of per-pixel.
+    struct framebuffer_pixel no_transparency_color = {0};
+    bool has_transparency_key = memcmp(&src_info->transparency_key, &no_transparency_color, sizeof(no_transparency_color)) != 0;
+
     // Copy line by line
     for (uint32_t ly = 0; ly < clipped_h; ly++)
     {
+        struct framebuffer_pixel *src_row = &src_info->pixels[(src_y + ly) * src_info->width + src_x];
+        struct framebuffer_pixel *dst_row = &screen->framebuffer[(dst_abs_y + ly) * screen->pixels_per_scanline + dst_abs_x];
         for (uint32_t lx = 0; lx < clipped_w; lx++)
         {
-            struct framebuffer_pixel p = src_info->pixels[(src_y + ly) * src_info->width + (src_x + lx)];
+            struct framebuffer_pixel p = src_row[lx];
 
-            // Transparency color, check if we have one
-            // black pixel transparency color means no transparency color.
-            struct framebuffer_pixel no_transparency_color = {0};
-
-            // Do we have a transparncy key?
-            if (memcmp(&src_info->transparency_key, &no_transparency_color, sizeof(no_transparency_color)) != 0)
+            if (has_transparency_key && memcmp(&p, &src_info->transparency_key, sizeof(p)) == 0)
             {
-                // We have a transprancy key does it match
-                if (memcmp(&p, &src_info->transparency_key, sizeof(p)) == 0)
-                {
-                    // Continue do not draw this pixel.
-                    continue;
-                }
+                // Continue do not draw this pixel.
+                continue;
             }
 
             // Write to the screen
-            screen->framebuffer[(dst_abs_y + ly) * screen->pixels_per_scanline + (dst_abs_x + lx)] = p;
+            dst_row[lx] = p;
         }
     }
 }

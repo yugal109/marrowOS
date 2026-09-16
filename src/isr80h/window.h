@@ -3,7 +3,8 @@
 
 enum
 {
-    ISR80H_WINDOW_UPDATE_TITLE = 0
+    ISR80H_WINDOW_UPDATE_TITLE = 0,
+    ISR80H_WINDOW_UPDATE_CURSOR_POSITION = 1
 };
 
 struct interrupt_frame;

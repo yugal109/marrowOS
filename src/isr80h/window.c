@@ -194,6 +194,15 @@ out:
     return (void *)(uintptr_t)res;
 }
 
+void *isr80h_command24_update_window_cursor_position(struct window *window, struct interrupt_frame *frame)
+{
+    int rel_x = (int)(uintptr_t)task_get_stack_item(task_current(), 2);
+    int rel_y = (int)(uintptr_t)task_get_stack_item(task_current(), 3);
+    struct terminal *win_term = window_terminal(window);
+    int res = terminal_cursor_set_from_pixel(win_term, rel_x, rel_y);
+    return (void *)(uintptr_t)res;
+}
+
 void *isr80h_command24_update_window(struct interrupt_frame *frame)
 {
     int res = 0;
@@ -217,6 +226,10 @@ void *isr80h_command24_update_window(struct interrupt_frame *frame)
     {
     case ISR80H_WINDOW_UPDATE_TITLE:
         res = (int)(uintptr_t)isr80h_command24_update_window_title(kern_window, frame);
+        break;
+
+    case ISR80H_WINDOW_UPDATE_CURSOR_POSITION:
+        res = (int)(uintptr_t)isr80h_command24_update_window_cursor_position(kern_window, frame);
         break;
 
     default:

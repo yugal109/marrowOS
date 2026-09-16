@@ -63,5 +63,6 @@ int terminal_total_cols(struct terminal *terminal);
 int terminal_cursor_col(struct terminal *terminal);
 int terminal_cursor_row(struct terminal *terminal);
 int terminal_cursor_set(struct terminal *terminal, int row, int col);
+int terminal_cursor_set_from_pixel(struct terminal *terminal, int rel_x, int rel_y);
 
 #endif

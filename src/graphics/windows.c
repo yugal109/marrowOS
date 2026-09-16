@@ -8,6 +8,7 @@
 #include "string/string.h"
 #include "graphics/font.h"
 #include "task/process.h"
+#include "io/tsc.h"
 // include tsc.h
 #include "status.h"
 #include "kernel.h"
@@ -58,15 +59,27 @@ out:
     return res;
 }
 
+// PS/2 can deliver movement packets far faster than the screen needs
+// repainting; without this a drag runs a full redraw on every single
+// packet. Coalescing to this interval keeps drags smooth instead of
+// flooding the framebuffer with redundant repaints.
+#define WINDOW_DRAG_REDRAW_INTERVAL_MS 8
+static TIME_MILISECONDS window_drag_last_redraw_ms = 0;
+
 void window_screen_mouse_move_handler(struct mouse *mouse, int moved_to_x, int moved_to_y)
 {
     if (window_moving)
     {
         if (window_moving->title_bar_graphics)
         {
-            size_t abs_x = moved_to_x - (window_moving->title_bar_graphics->width / 2);
-            size_t abs_y = moved_to_y - (window_moving->title_bar_graphics->height / 2);
-            window_position_set(window_moving, abs_x, abs_y);
+            TIME_MILISECONDS now_ms = tsc_miliseconds();
+            if (now_ms - window_drag_last_redraw_ms >= WINDOW_DRAG_REDRAW_INTERVAL_MS)
+            {
+                window_drag_last_redraw_ms = now_ms;
+                size_t abs_x = moved_to_x - (window_moving->title_bar_graphics->width / 2);
+                size_t abs_y = moved_to_y - (window_moving->title_bar_graphics->height / 2);
+                window_position_set(window_moving, abs_x, abs_y);
+            }
         }
 
         size_t rel_x = moved_to_x - window_moving->root_graphics->starting_x;
@@ -396,8 +409,6 @@ int window_position_set(struct window *window, size_t new_x, size_t new_y)
     window->x = new_x;
     window->y = new_y;
 
-    window_bring_to_top(window);
-
     graphics_info_recalculate(window->root_graphics);
 
     int x_gap = old_screen_x - (int)window->root_graphics->starting_x;
@@ -427,7 +438,18 @@ int window_position_set(struct window *window, size_t new_x, size_t new_y)
         y_redraw_height = -y_gap;
     }
 
-    if ((x_redraw_width > window->root_graphics->width) ||
+    // The strip-only erase below assumes the window's own redraw at the new
+    // position will fully overwrite whatever was left behind in the overlap
+    // between old and new position. That's false for a window with a
+    // transparency key: its "see-through" pixels don't overwrite anything,
+    // so stale pixels in that overlap never get cleared and smear into a
+    // trail as the window moves. Such windows always need the full old
+    // rectangle erased, not just the exposed strips.
+    struct framebuffer_pixel no_transparency_color = {0};
+    bool has_transparency_key = memcmp(&window->graphics->transparency_key, &no_transparency_color, sizeof(no_transparency_color)) != 0;
+
+    if (has_transparency_key ||
+        (x_redraw_width > window->root_graphics->width) ||
         (x_redraw_height > window->root_graphics->height) ||
         (y_redraw_width > window->root_graphics->width) ||
         (y_redraw_height > window->root_graphics->height))
@@ -547,8 +569,10 @@ void window_title_bar_clicked(struct graphics_info *title_graphics, size_t rel_x
         else
         {
             // Start dragging on press; window_release_handler() below drops it
-            // the instant the button actually comes back up.
+            // the instant the button actually comes back up. Bring-to-top
+            // happens once here, not on every move tick of the drag.
             window_moving = win;
+            window_bring_to_top(win);
         }
     }
 }

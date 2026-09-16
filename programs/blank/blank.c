@@ -49,6 +49,10 @@ int main(int argc, char **argv)
         {
             printf("%c", (char)window_event.data.keypress.key);
         }
+        else if (res >= 0 && window_event.type == WINDOW_EVENT_TYPE_MOUSE_CLICK)
+        {
+            marrowos_window_cursor_set(win, window_event.data.click.x, window_event.data.click.y);
+        }
     }
 
     return 0;
