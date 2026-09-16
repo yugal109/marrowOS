@@ -48,6 +48,9 @@ void ps2_mouse_handle_interrupt(struct interrupt_frame *frame)
 {
     static uint8_t packet[4];
     static int packet_byte_count = 0;
+    // Tracks the previously-seen button state so a held->not-held transition
+    // can be detected and reported as a single release event.
+    static MOUSE_CLICK_TYPE ps2_mouse_prev_click_type = MOUSE_NO_CLICK;
     size_t ps2_mouse_packet_size = ps2_mouse_private.mouse_packet_size;
     uint8_t data = insb(PS2_COMMUNICATION_PORT);
 
@@ -122,6 +125,12 @@ void ps2_mouse_handle_interrupt(struct interrupt_frame *frame)
         // Theres a click register the mouse click
         mouse_click(&ps2_mouse, click_type);
     }
+    else if (ps2_mouse_prev_click_type != MOUSE_NO_CLICK)
+    {
+        // The button that was held is no longer held: edge-detected release
+        mouse_released(&ps2_mouse, ps2_mouse_prev_click_type);
+    }
+    ps2_mouse_prev_click_type = click_type;
 
     mouse_moved(&ps2_mouse);
     return;

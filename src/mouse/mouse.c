@@ -3,11 +3,15 @@
 #include "lib/vector/vector.h"
 #include "graphics/graphics.h"
 #include "graphics/windows.h"
+#include "graphics/image/image.h"
 #include "kernel.h"
 #include "status.h"
 
 // Holds all the loaded mouse drivers
 struct vector *mouse_driver_vector = NULL;
+
+// Cursor arrow image, loaded once and reused for every redraw
+static struct image *mouse_cursor_image = NULL;
 
 int mouse_system_load_static_drivers()
 {
@@ -37,10 +41,29 @@ out:
 
 void mouse_draw_default_impl(struct mouse *mouse)
 {
+    struct terminal *win_term = window_terminal(mouse->graphic.window);
+
+    if (!mouse_cursor_image)
+    {
+        mouse_cursor_image = graphics_image_load("@:/cursor.bmp");
+    }
+
+    if (mouse_cursor_image)
+    {
+        // White is the cursor image's background; skip it so only the arrow itself draws
+        struct framebuffer_pixel white_color = {0};
+        white_color.red = 0xff;
+        white_color.green = 0xff;
+        white_color.blue = 0xff;
+        terminal_ignore_color(win_term, white_color);
+        terminal_draw_image(win_term, 0, 0, mouse_cursor_image);
+        terminal_ignore_color_finish(win_term);
+        return;
+    }
+
+    // Fallback if the cursor image failed to load
     struct framebuffer_pixel pixel_color = {0};
     pixel_color.red = 0xf3;
-
-    struct terminal *win_term = window_terminal(mouse->graphic.window);
     terminal_draw_rect(win_term, 0, 0, win_term->bounds.width, win_term->bounds.height, pixel_color);
 }
 
@@ -67,6 +90,13 @@ int mouse_register(struct mouse *mouse)
 
     mouse->event_handlers.move_handlers = vector_new(sizeof(MOUSE_MOVE_EVENT_HANDLER_FUNCTION), 4, 0);
     if (!mouse->event_handlers.move_handlers)
+    {
+        res = -ENOMEM;
+        goto out;
+    }
+
+    mouse->event_handlers.release_handlers = vector_new(sizeof(MOUSE_RELEASE_EVENT_HANDLER_FUNCTION), 4, 0);
+    if (!mouse->event_handlers.release_handlers)
     {
         res = -ENOMEM;
         goto out;
@@ -125,6 +155,21 @@ void mouse_click(struct mouse *mouse, MOUSE_CLICK_TYPE type)
         if (click_handler)
         {
             click_handler(mouse, mouse->coords.x, mouse->coords.y, type);
+        }
+    }
+}
+
+void mouse_released(struct mouse *mouse, MOUSE_CLICK_TYPE type)
+{
+    // Loop through every release handler and invoke it
+    size_t total_release_handlers = vector_count(mouse->event_handlers.release_handlers);
+    for (size_t i = 0; i < total_release_handlers; i++)
+    {
+        MOUSE_RELEASE_EVENT_HANDLER_FUNCTION release_handler = NULL;
+        vector_at(mouse->event_handlers.release_handlers, i, &release_handler, sizeof(release_handler));
+        if (release_handler)
+        {
+            release_handler(mouse, mouse->coords.x, mouse->coords.y, type);
         }
     }
 }
@@ -214,6 +259,31 @@ void mouse_register_move_handler(struct mouse *mouse, MOUSE_MOVE_EVENT_HANDLER_F
         if (_mouse)
         {
             mouse_register_move_handler(_mouse, move_handler);
+        }
+    }
+}
+
+void mouse_register_release_handler(struct mouse *mouse, MOUSE_RELEASE_EVENT_HANDLER_FUNCTION release_handler)
+{
+    if (mouse)
+    {
+        vector_push(mouse->event_handlers.release_handlers, &release_handler);
+        return;
+    }
+
+    size_t total_mice = vector_count(mouse_driver_vector);
+    if (total_mice == 0)
+    {
+        panic("NO Mice drivers are registered\n");
+    }
+
+    for (size_t i = 0; i < total_mice; i++)
+    {
+        struct mouse *_mouse = NULL;
+        vector_at(mouse_driver_vector, i, &_mouse, sizeof(_mouse));
+        if (_mouse)
+        {
+            mouse_register_release_handler(_mouse, release_handler);
         }
     }
 }

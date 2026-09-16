@@ -15,6 +15,7 @@ all: directories ./bin/boot.bin ./bin/kernel.bin user_programs
 	sudo cp ./programs/simple/build/simple.bin /mnt/d
 	sudo cp ./data/images/bkground.bmp /mnt/d
 	sudo cp ./data/images/clsicon.bmp /mnt/d
+	sudo cp ./data/images/cursor.bmp /mnt/d
 	sudo cp ./data/images/sysfont.bmp /mnt/d/sysfont.bmp
 	sudo cp ./programs/blank/blank.elf /mnt/d
 	sudo cp ./programs/shell/shell.elf /mnt/d

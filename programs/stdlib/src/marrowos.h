@@ -4,6 +4,17 @@
 #include <stdbool.h>
 
 // temporary: until we implement the GUI SDK
+enum
+{
+    WINDOW_EVENT_TYPE_NULL,
+    WINDOW_EVENT_TYPE_FOCUS,
+    WINDOW_EVENT_TYPE_LOST_FOCUS,
+    WINDOW_EVENT_TYPE_MOUSE_MOVE,
+    WINDOW_EVENT_TYPE_MOUSE_CLICK,
+    WINDOW_EVENT_TYPE_WINDOW_CLOSE,
+    WINDOW_EVENT_TYPE_KEY_PRESS
+};
+
 struct window_event
 {
     int type;
@@ -30,6 +41,11 @@ struct window_event
             int x;
             int y;
         } click;
+
+        struct
+        {
+            int key;
+        } keypress;
 
     } data;
 };

@@ -133,10 +133,18 @@ void window_click_handler(struct mouse *mouse, int abs_x, int abs_y, MOUSE_CLICK
     }
 }
 
+void window_release_handler(struct mouse *mouse, int abs_x, int abs_y, MOUSE_CLICK_TYPE type)
+{
+    // Whatever button was held has now come back up: whatever window was
+    // being dragged (if any) gets dropped right here, wherever that is.
+    window_moving = NULL;
+}
+
 int window_system_initialize_stage2()
 {
     mouse_register_move_handler(NULL, window_screen_mouse_move_handler);
     mouse_register_click_handler(NULL, window_click_handler);
+    mouse_register_release_handler(NULL, window_release_handler);
     keyboard_register_handler(NULL, window_keyboard_listener);
     return 0;
 }
@@ -538,16 +546,9 @@ void window_title_bar_clicked(struct graphics_info *title_graphics, size_t rel_x
         }
         else
         {
-            // if they click the window they are already moving ,toggle it as no longer moving.
-            if (window_moving == win)
-            {
-                window_moving = NULL;
-            }
-            else
-            {
-                //  this was not the currently moving window ,thus set the new moving window to the one we clicked.
-                window_moving = win;
-            }
+            // Start dragging on press; window_release_handler() below drops it
+            // the instant the button actually comes back up.
+            window_moving = win;
         }
     }
 }

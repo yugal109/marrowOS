@@ -213,10 +213,9 @@ void kernel_main()
     // initialize stage two graphics setup
     graphics_setup_stage_two(&default_graphics_info);
 
-    // in no particular order.
-    // initialize graphics stage two
-    // initialize mouse system
-    // initialize keyboard system
+    // Must come before window_system_initialize_stage2: that registers a
+    // keyboard listener, which silently no-ops if no keyboard exists yet.
+    keyboard_init();
 
     // Initialize window system stage two
     window_system_initialize_stage2();
@@ -272,8 +271,6 @@ void kernel_main()
     // Register isr80h commands
     isr80h_register_commands();
 
-    // Initialize the keyboard
-    keyboard_init();
     // struct window *win = window_create(graphics_screen_info(), NULL, "Test Window", 50, 50, 300, 300, 0, 4395327);
     // if (win)
     // {
@@ -286,11 +283,6 @@ void kernel_main()
         print("Window creation issue\n");
     }
 
-    enable_interrupts();
-    while (1)
-    {
-    }
-
     print("Loading program...\n");
     struct process *process = 0;
     int res = process_load_switch("@:/blank.elf", &process);
@@ -300,7 +292,7 @@ void kernel_main()
     }
 
     // Drop to user land
-    // task_run_first_ever_task();
+    task_run_first_ever_task();
 
     // struct command_argument argument;
     // argument.next = 0x00;

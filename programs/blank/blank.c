@@ -33,7 +33,7 @@ struct userland_graphics
 
 int main(int argc, char **argv)
 {
-    struct window *win = marrowos_window_create("Hello world", 200, 200, 0, 0);
+    struct window *win = marrowos_window_create("Hello world", 600, 500, 0, 0);
     if (win)
     {
         printf("all okay\n");
@@ -41,37 +41,14 @@ int main(int argc, char **argv)
 
     marrowos_divert_stdout_to_window(win);
 
-    struct userland_graphics *graphics = marrowos_window_get_graphics(win);
-    if (!graphics)
-    {
-        printf("No graphics\n");
-        return -1;
-    }
-
-    struct framebuffer_pixel *pixels = marrowos_graphic_pixels_get(graphics);
-    struct framebuffer_pixel blue = {.blue = 0xff, .red = 0x00, .green = 0x00};
-    for (size_t x = 0; x < graphics->width; x++)
-    {
-        for (size_t y = 0; y < graphics->height; y++)
-        {
-            pixels[y * graphics->width + x] = blue;
-        }
-    }
-
-    marrowos_window_redraw(win);
-
     while (1)
     {
-        printf("File blank.elf opened failed\n");
         struct window_event window_event = {0};
         int res = marrowos_process_get_window_event(&window_event);
-        if (res >= 0)
+        if (res >= 0 && window_event.type == WINDOW_EVENT_TYPE_KEY_PRESS)
         {
-            printf("event type: %i\n", window_event.type);
+            printf("%c", (char)window_event.data.keypress.key);
         }
-    }
-    while (1)
-    {
     }
 
     return 0;
