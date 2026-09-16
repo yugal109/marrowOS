@@ -144,7 +144,7 @@ marrowos_realloc:
     ret
 
 ; void* marrowos_window_create(const char* title, long width, long height, long flags, long id)
-peachos_window_create:
+marrowos_window_create:
     mov rax, 16
     push qword R8
     push qword rcx

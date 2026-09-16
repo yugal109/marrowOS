@@ -17,6 +17,7 @@ struct process_arguments
 
 // forward declare file stat
 struct file_stat;
+struct window;
 
 void print(const char *message);
 int marrowos_getkey();
@@ -37,5 +38,6 @@ long marrowos_fread(void *buffer, size_t size, size_t count, long fd);
 long marrowos_fseek(long fd, long offset, long whence);
 long marrowos_fstat(long fd, struct file_stat *file_stat_out);
 void *marrowos_realloc(void *old_ptr, size_t new_size);
+struct window *marrowos_window_create(const char *title, long width, long height, long flags, long id);
 
 #endif

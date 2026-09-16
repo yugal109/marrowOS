@@ -34,10 +34,18 @@ void interrupt_handler(int interrupt, struct interrupt_frame *frame)
     if (interrupt_callbacks[interrupt] != 0)
     {
         // task_current_save_state(frame);
+        if (task_current())
+        {
+            task_current_save_state(frame);
+        }
         interrupt_callbacks[interrupt](frame);
     }
 
     // task_page();
+    if (task_current())
+    {
+        task_page();
+    }
     outb(0x20, 0x20);
     outb(0xA0, 0x20);
 }
@@ -153,8 +161,10 @@ void idt_handle_exception(struct interrupt_frame *frame)
 void idt_clock()
 {
     outb(0x20, 0x20);
-
-    print("test\n");
+    if (!task_current())
+    {
+        return;
+    }
     task_next();
 }
 

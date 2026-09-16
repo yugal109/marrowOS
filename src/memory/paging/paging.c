@@ -329,21 +329,34 @@ struct paging_desc_entry *paging_get(struct paging_desc *desc, void *virtual_add
     size_t pd_index = (va >> 21) & 0x1FF;
     size_t pt_index = (va >> 12) & 0x1FF;
 
+    // 1 PML4 entry
     struct paging_desc_entry *pml4_entry = &desc->pml->entries[pml4_index];
     if (paging_null_entry(pml4_entry))
         return NULL;
 
     struct paging_desc_entry *pdpt_entries = (struct paging_desc_entry *)((uintptr_t)(pml4_entry->address) << 12);
+    if (paging_null_entry(pdpt_entries))
+        return NULL;
+
+    // 2 ) pdpt entry
     struct paging_desc_entry *pdpt_entry = &pdpt_entries[pdpt_index];
     if (paging_null_entry(pdpt_entry))
         return NULL;
 
     struct paging_desc_entry *pd_entries = (struct paging_desc_entry *)((uintptr_t)(pdpt_entry->address) << 12);
+    if (paging_null_entry(pd_entries))
+        return NULL;
+
+    // 3 PD entry
     struct paging_desc_entry *pd_entry = &pd_entries[pd_index];
     if (paging_null_entry(pd_entry))
         return NULL;
 
     struct paging_desc_entry *pt_entries = (struct paging_desc_entry *)((uintptr_t)(pd_entry->address) << 12);
+    if (paging_null_entry(pt_entries))
+        return NULL;
+
+    // 4 pt entry
     return &pt_entries[pt_index];
 }
 

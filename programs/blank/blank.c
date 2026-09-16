@@ -13,7 +13,7 @@ struct window
 
 int main(int argc, char **argv)
 {
-    struct window *win = peachos_window_create("Hello world", 200, 200, 0, 0);
+    struct window *win = marrowos_window_create("Hello world", 200, 200, 0, 0);
     if (win)
     {
         printf("all okay\n");
