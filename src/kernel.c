@@ -2,12 +2,12 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "idt/idt.h"
-// #include "io/io.h"
 #include "memory/memory.h"
 #include "memory/heap/heap.h"
 #include "memory/heap/kheap.h"
 #include "memory/paging/paging.h"
 #include "io/tsc.h"
+#include "io/pci.h"
 #include "graphics/graphics.h"
 #include "graphics/font.h"
 #include "fs/pparser.h"
@@ -186,6 +186,9 @@ void kernel_main()
     // Enable interrupt descriptor table
     idt_init();
 
+    // enable pci and scan for devices
+    pci_init();
+
     // Enable fs functionality
     fs_init();
 
@@ -282,6 +285,10 @@ void kernel_main()
     // {
     //     print("Window creation issue\n");
     // }
+
+    print("Total PCI devices:");
+    print(itoa((int)pci_device_count()));
+    print("\n");
 
     // print("Loading program...\n");
     struct process *process = 0;

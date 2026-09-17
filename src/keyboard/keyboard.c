@@ -3,6 +3,8 @@
 #include "kernel.h"
 #include "classic.h"
 #include "task/process.h"
+#include "memory/heap/kheap.h"
+#include "memory/memory.h"
 #include "task/task.h"
 #include "memory/memory.h"
 #include "memory/heap/kheap.h"

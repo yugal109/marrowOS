@@ -387,9 +387,9 @@ void window_draw_title_bar(struct window *window, struct framebuffer_pixel title
 
     // Minimize glyph: a short horizontal bar near the bottom of its slot.
     graphics_draw_rect(window->title_bar_graphics,
-                        window->title_bar_components.minimize_btn.x + 2,
-                        window->title_bar_components.minimize_btn.y + window->title_bar_components.minimize_btn.height - 4,
-                        window->title_bar_components.minimize_btn.width - 4, 2, icon_ink);
+                       window->title_bar_components.minimize_btn.x + 2,
+                       window->title_bar_components.minimize_btn.y + window->title_bar_components.minimize_btn.height - 4,
+                       window->title_bar_components.minimize_btn.width - 4, 2, icon_ink);
 
     // Maximize glyph: a hollow square outline.
     size_t inset = 3;
@@ -922,18 +922,18 @@ void window_title_bar_clicked(struct graphics_info *title_graphics, size_t rel_x
     if (win)
     {
         if (window_title_bar_hit_test(win->title_bar_components.close_btn.x, win->title_bar_components.close_btn.y,
-                                       win->title_bar_components.close_btn.width, win->title_bar_components.close_btn.height, rel_x, rel_y))
+                                      win->title_bar_components.close_btn.width, win->title_bar_components.close_btn.height, rel_x, rel_y))
         {
             window_close(win);
             win = NULL;
         }
         else if (window_title_bar_hit_test(win->title_bar_components.minimize_btn.x, win->title_bar_components.minimize_btn.y,
-                                            win->title_bar_components.minimize_btn.width, win->title_bar_components.minimize_btn.height, rel_x, rel_y))
+                                           win->title_bar_components.minimize_btn.width, win->title_bar_components.minimize_btn.height, rel_x, rel_y))
         {
             window_hide(win);
         }
         else if (window_title_bar_hit_test(win->title_bar_components.maximize_btn.x, win->title_bar_components.maximize_btn.y,
-                                            win->title_bar_components.maximize_btn.width, win->title_bar_components.maximize_btn.height, rel_x, rel_y))
+                                           win->title_bar_components.maximize_btn.width, win->title_bar_components.maximize_btn.height, rel_x, rel_y))
         {
             window_maximize_toggle(win);
         }
@@ -1204,7 +1204,7 @@ void window_keyboard_event_listener_on_event_keypress(struct window *win, struct
     window_event_push(win, &win_event);
 }
 
-void window_keyboard_event_listener_on_event_capslock_change(struct window *win, struct keyboard_event *event)
+void window_keyboard_event_listener_on_event_capslock_change(struct window *win, struct keyboard *keyboard, struct keyboard_event *event)
 {
     // do nothing
 }
@@ -1220,7 +1220,7 @@ void window_keyboard_event_listener_on_event(struct keyboard *keyboard, struct k
             break;
 
         case KEYBOARD_EVENT_CAPS_LOCK_CHANGE:
-            window_keyboard_event_listener_on_event_capslock_change(focused_win, event);
+            window_keyboard_event_listener_on_event_capslock_change(focused_win, keyboard, event);
             break;
         }
     }
