@@ -78,6 +78,9 @@ struct graphics_info
 
     struct framebuffer_pixel transparency_key;
 
+    // Skips this in redraw and click hit-testing. Used for minimize/hide.
+    bool hidden;
+
     struct
     {
         GRAPHICS_MOUSE_CLICK_FUNCTION mouse_click;
@@ -92,6 +95,15 @@ void graphics_draw_rect(
     size_t width,
     size_t height,
     struct framebuffer_pixel pixel_color);
+void graphics_draw_rect_rounded(
+    struct graphics_info *graphics_info,
+    uint32_t x,
+    uint32_t y,
+    size_t width,
+    size_t height,
+    uint32_t radius,
+    struct framebuffer_pixel fill_color,
+    struct framebuffer_pixel background_color);
 void graphics_ignore_color(struct graphics_info *graphics_info, struct framebuffer_pixel pixel_color);
 void graphics_transparency_key_set(struct graphics_info *graphics_info, struct framebuffer_pixel pixel_color);
 void graphics_transparency_key_remove(struct graphics_info *graphics_info);
@@ -124,6 +136,7 @@ void graphics_draw_image_scaled(struct graphics_info *graphics_info, struct imag
 void graphics_redraw_region(struct graphics_info *g, uint32_t local_x, uint32_t local_y, uint32_t width, uint32_t height);
 void graphics_redraw_graphics_to_screen(struct graphics_info *relative_graphics, uint32_t rel_x, uint32_t rel_y, uint32_t width, uint32_t height);
 void graphics_info_recalculate(struct graphics_info *graphics_info);
+void graphics_info_resize(struct graphics_info *graphics_info, size_t new_relative_x, size_t new_relative_y, size_t new_width, size_t new_height);
 
 struct graphics_info *graphics_get_at_screen_position(size_t x, size_t y, struct graphics_info *ignored, bool top_first);
 struct graphics_info *graphics_get_child_at_position(struct graphics_info *graphics,

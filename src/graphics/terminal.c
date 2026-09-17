@@ -148,15 +148,13 @@ void terminal_background_save(struct terminal *terminal)
         }
     }
 
-    // Snapshot only this terminal's rectangle (not always the whole screen buffer origin)
+    // pixels[] uses local coords (0,0 = top-left), not screen position.
     for (size_t y = 0; y < height; y++)
     {
         for (size_t x = 0; x < width; x++)
         {
-            size_t abs_x = terminal->bounds.abs_x + x;
-            size_t abs_y = terminal->bounds.abs_y + y;
             terminal->terminal_background[y * width + x] =
-                terminal->graphics_info->pixels[abs_y * terminal->graphics_info->width + abs_x];
+                terminal->graphics_info->pixels[y * terminal->graphics_info->width + x];
         }
     }
 }
@@ -216,8 +214,7 @@ out:
     return res;
 }
 
-// Converts a click's position (relative to the terminal's own body, in
-// pixels) into the grid cell it landed on and moves the cursor there.
+// Converts a click's pixel position into a grid cell and moves the cursor there.
 int terminal_cursor_set_from_pixel(struct terminal *terminal, int rel_x, int rel_y)
 {
     int col = rel_x / terminal->font->bits_width_per_character;

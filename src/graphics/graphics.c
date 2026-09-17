@@ -285,7 +285,7 @@ void graphics_redraw_children(struct graphics_info *g)
     {
         struct graphics_info *child = NULL;
         vector_at(g->children, i, &child, sizeof(child));
-        if (child)
+        if (child && !child->hidden)
         {
             graphics_redraw(child);
         }
@@ -334,7 +334,7 @@ void graphics_redraw_region(struct graphics_info *g, uint32_t local_x, uint32_t 
     {
         struct graphics_info *child = NULL;
         vector_at(g->children, i, &child, sizeof(child));
-        if (!child)
+        if (!child || child->hidden)
         {
             continue;
         }
@@ -405,6 +405,73 @@ void graphics_draw_rect(
             graphics_draw_pixel(graphics_info, lx, ly, pixel_color);
         }
     }
+}
+
+// Fills a rect with rounded corners; corner pixels outside the radius get
+// background_color instead of fill_color.
+void graphics_draw_rect_rounded(
+    struct graphics_info *graphics_info,
+    uint32_t x,
+    uint32_t y,
+    size_t width,
+    size_t height,
+    uint32_t radius,
+    struct framebuffer_pixel fill_color,
+    struct framebuffer_pixel background_color)
+{
+    if (radius > width / 2)
+        radius = width / 2;
+    if (radius > height / 2)
+        radius = height / 2;
+
+    uint32_t x_end = x + (uint32_t)width;
+    uint32_t y_end = y + (uint32_t)height;
+    for (uint32_t ly = y; ly < y_end; ly++)
+    {
+        uint32_t ry = ly - y;
+        for (uint32_t lx = x; lx < x_end; lx++)
+        {
+            uint32_t rx = lx - x;
+            struct framebuffer_pixel out = fill_color;
+
+            bool near_top = ry < radius;
+            bool near_bottom = ry >= (uint32_t)height - radius;
+            bool near_left = rx < radius;
+            bool near_right = rx >= (uint32_t)width - radius;
+
+            if ((near_top || near_bottom) && (near_left || near_right))
+            {
+                int32_t cx = near_left ? (int32_t)radius : (int32_t)width - (int32_t)radius - 1;
+                int32_t cy = near_top ? (int32_t)radius : (int32_t)height - (int32_t)radius - 1;
+                int32_t dx = (int32_t)rx - cx;
+                int32_t dy = (int32_t)ry - cy;
+                if ((dx * dx + dy * dy) > (int32_t)(radius * radius))
+                {
+                    out = background_color;
+                }
+            }
+
+            graphics_draw_pixel(graphics_info, lx, ly, out);
+        }
+    }
+}
+
+// Resizes/repositions an existing graphics_info in place. Old pixels are
+// discarded — caller must redraw everything after calling this.
+void graphics_info_resize(struct graphics_info *graphics_info, size_t new_relative_x, size_t new_relative_y, size_t new_width, size_t new_height)
+{
+    if (!graphics_info)
+    {
+        return;
+    }
+
+    kfree(graphics_info->pixels);
+    graphics_info->relative_x = new_relative_x;
+    graphics_info->relative_y = new_relative_y;
+    graphics_info->width = new_width;
+    graphics_info->height = new_height;
+    graphics_info_recalculate(graphics_info);
+    graphics_info->pixels = kzalloc(new_width * new_height * sizeof(struct framebuffer_pixel));
 }
 
 void graphics_info_recalculate(struct graphics_info *graphics_info)
@@ -483,7 +550,7 @@ struct graphics_info *graphics_get_child_at_position(struct graphics_info *graph
             size_t index = i - 1;
             struct graphics_info *child = NULL;
             vector_at(graphics->children, index, &child, sizeof(child));
-            if (!child)
+            if (!child || child->hidden)
             {
                 continue;
             }
@@ -511,7 +578,7 @@ struct graphics_info *graphics_get_child_at_position(struct graphics_info *graph
         {
             struct graphics_info *child = NULL;
             vector_at(graphics->children, i, &child, sizeof(child));
-            if (!child)
+            if (!child || child->hidden)
                 continue;
 
             if (graphics_is_in_ignored_branch(child, ignored))

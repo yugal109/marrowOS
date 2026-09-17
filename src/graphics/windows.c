@@ -118,7 +118,7 @@ struct window *window_get_at_position(size_t abs_x, size_t abs_y, struct window 
         struct window *win = NULL;
         vector_at(windows_vector, i, &win, sizeof(win));
 
-        if (win && win != ignore_window)
+        if (win && win != ignore_window && !win->root_graphics->hidden)
         {
             size_t whole_win_width = win->root_graphics->width;
             size_t whole_win_height = win->root_graphics->height;
@@ -153,18 +153,212 @@ void window_release_handler(struct mouse *mouse, int abs_x, int abs_y, MOUSE_CLI
     window_moving = NULL;
 }
 
+// Forward decl: defined with the dock below, but hide/show need to refresh it.
+void window_dock_icon_redraw();
+
+void window_hide(struct window *window)
+{
+    if (!window || window->root_graphics->hidden)
+    {
+        return;
+    }
+
+    window->root_graphics->hidden = true;
+
+    if (focused_window == window)
+    {
+        focused_window = NULL;
+    }
+
+    // Redraw its old spot now it's excluded from the tree walk.
+    graphics_redraw_region(graphics_screen_info(), window->root_graphics->starting_x, window->root_graphics->starting_y, window->root_graphics->width, window->root_graphics->height);
+    window_dock_icon_redraw();
+}
+
+void window_show(struct window *window)
+{
+    if (!window || !window->root_graphics->hidden)
+    {
+        return;
+    }
+
+    window->root_graphics->hidden = false;
+    window_focus(window); // brings to top + colors its title bar
+    window_redraw(window);
+    window_dock_icon_redraw();
+}
+
+// --- Dock: bottom bar, always on top. Only the Terminal icon is clickable
+// (shows/hides its window); the rest are decorative for now. ---
+
+#define WINDOW_DOCK_HEIGHT 60
+#define WINDOW_DOCK_ICON_MARGIN 16
+#define WINDOW_DOCK_ICON_GAP 12
+#define WINDOW_DOCK_DOT_SIZE 6
+#define WINDOW_DOCK_ZINDEX 200000
+#define WINDOW_DOCK_TOTAL_ICONS 5
+
+static struct window *dock_window = NULL;
+static struct window *dock_target_window = NULL;
+static struct image *dock_icons[WINDOW_DOCK_TOTAL_ICONS] = {0};
+static const char *dock_icon_paths[WINDOW_DOCK_TOTAL_ICONS] = {
+    "@:/terminal.bmp",
+    "@:/settings.bmp",
+    "@:/editor.bmp",
+    "@:/calc.bmp",
+    "@:/music.bmp",
+};
+
+size_t window_dock_icon_x(int index)
+{
+    // All icons are the same size, so [0]'s width works for every slot.
+    size_t icon_size = dock_icons[0] ? dock_icons[0]->width : 0;
+    return WINDOW_DOCK_ICON_MARGIN + (size_t)index * (icon_size + WINDOW_DOCK_ICON_GAP);
+}
+
+void window_dock_icon_redraw()
+{
+    if (!dock_window || !dock_icons[0])
+    {
+        return;
+    }
+
+    struct framebuffer_pixel white = {0};
+    white.red = 0xff;
+    white.green = 0xff;
+    white.blue = 0xff;
+
+    size_t icon_size = dock_icons[0]->width;
+    size_t icon_y = (WINDOW_DOCK_HEIGHT - icon_size) / 2;
+
+    terminal_ignore_color(dock_window->terminal, white);
+    for (int i = 0; i < WINDOW_DOCK_TOTAL_ICONS; i++)
+    {
+        if (dock_icons[i])
+        {
+            terminal_draw_image(dock_window->terminal, window_dock_icon_x(i), icon_y, dock_icons[i]);
+        }
+    }
+    terminal_ignore_color_finish(dock_window->terminal);
+
+    // Dot under the icon: green if the window is visible, else blends into white bg.
+    bool is_visible = dock_target_window && !dock_target_window->root_graphics->hidden;
+    struct framebuffer_pixel dot_color = white;
+    if (is_visible)
+    {
+        dot_color.red = 0x5b;
+        dot_color.green = 0xd6;
+        dot_color.blue = 0x7a;
+    }
+
+    size_t dot_x = window_dock_icon_x(0) + (icon_size / 2) - (WINDOW_DOCK_DOT_SIZE / 2);
+    size_t dot_y = icon_y + icon_size + 4;
+    graphics_draw_rect_rounded(dock_window->graphics, dot_x, dot_y, WINDOW_DOCK_DOT_SIZE, WINDOW_DOCK_DOT_SIZE, WINDOW_DOCK_DOT_SIZE / 2, dot_color, white);
+
+    window_redraw(dock_window);
+}
+
+void window_dock_body_clicked(struct graphics_info *graphics, size_t rel_x, size_t rel_y, MOUSE_CLICK_TYPE type)
+{
+    if (!dock_target_window || !dock_icons[0])
+    {
+        return;
+    }
+
+    size_t icon_size = dock_icons[0]->width;
+    size_t icon_x = window_dock_icon_x(0);
+    size_t icon_y = (WINDOW_DOCK_HEIGHT - icon_size) / 2;
+    if (rel_x < icon_x || rel_x >= icon_x + icon_size ||
+        rel_y < icon_y || rel_y >= icon_y + icon_size)
+    {
+        // Other icons / empty dock space do nothing.
+        return;
+    }
+
+    if (dock_target_window->root_graphics->hidden)
+    {
+        window_show(dock_target_window);
+    }
+    else
+    {
+        window_hide(dock_target_window);
+    }
+
+    window_dock_icon_redraw();
+}
+
+void window_dock_initialize()
+{
+    struct graphics_info *screen = graphics_screen_info();
+    dock_window = window_create(screen, NULL, "", 0, screen->height - WINDOW_DOCK_HEIGHT, screen->width, WINDOW_DOCK_HEIGHT, WINDOW_FLAG_BORDERLESS, -1);
+    if (!dock_window)
+    {
+        return;
+    }
+
+    for (int i = 0; i < WINDOW_DOCK_TOTAL_ICONS; i++)
+    {
+        dock_icons[i] = graphics_image_load(dock_icon_paths[i]);
+    }
+
+    window_set_z_index(dock_window, WINDOW_DOCK_ZINDEX);
+    graphics_click_handler_set(dock_window->graphics, window_dock_body_clicked);
+    window_dock_icon_redraw();
+}
+
+void window_dock_register_target(struct window *target)
+{
+    dock_target_window = target;
+    window_dock_icon_redraw();
+}
+
 int window_system_initialize_stage2()
 {
     mouse_register_move_handler(NULL, window_screen_mouse_move_handler);
     mouse_register_click_handler(NULL, window_click_handler);
     mouse_register_release_handler(NULL, window_release_handler);
     keyboard_register_handler(NULL, window_keyboard_listener);
+    window_dock_initialize();
     return 0;
 }
 
 struct terminal *window_terminal(struct window *window)
 {
     return window->terminal;
+}
+
+// Lays out close/minimize/maximize hit-boxes. Shared by create and resize.
+void window_title_bar_layout_icons(struct window *window)
+{
+    if (!window->title_bar_terminal)
+    {
+        return;
+    }
+
+    size_t bar_width = window->title_bar_terminal->bounds.width;
+    size_t icon_w = close_icon->width;
+    size_t icon_h = close_icon->height;
+    size_t icon_y = (window->title_bar_terminal->bounds.height / 2) - (icon_h / 2);
+    size_t slot = icon_w + (icon_w / 2);
+
+    size_t close_x = bar_width - icon_w - (icon_w / 2);
+    window->title_bar_components.close_btn.x = close_x;
+    window->title_bar_components.close_btn.y = icon_y;
+    window->title_bar_components.close_btn.width = icon_w;
+    window->title_bar_components.close_btn.height = icon_h;
+
+    // Left to right: minimize, maximize, close.
+    size_t maximize_x = close_x - slot;
+    window->title_bar_components.maximize_btn.x = maximize_x;
+    window->title_bar_components.maximize_btn.y = icon_y;
+    window->title_bar_components.maximize_btn.width = icon_w;
+    window->title_bar_components.maximize_btn.height = icon_h;
+
+    size_t minimize_x = maximize_x - slot;
+    window->title_bar_components.minimize_btn.x = minimize_x;
+    window->title_bar_components.minimize_btn.y = icon_y;
+    window->title_bar_components.minimize_btn.width = icon_w;
+    window->title_bar_components.minimize_btn.height = icon_h;
 }
 
 void window_draw_title_bar(struct window *window, struct framebuffer_pixel title_bar_bg_color)
@@ -175,8 +369,6 @@ void window_draw_title_bar(struct window *window, struct framebuffer_pixel title
     }
 
     size_t total_window_width_bounds = window->title_bar_graphics->width;
-    size_t icon_pos_x = window->title_bar_components.close_btn.x;
-    size_t icon_pos_y = window->title_bar_components.close_btn.y;
     const char *title = window->title;
 
     // draww the background of the title bar
@@ -186,13 +378,37 @@ void window_draw_title_bar(struct window *window, struct framebuffer_pixel title
     terminal_cursor_set(window->title_bar_terminal, 0, 0);
     terminal_print(window->title_bar_terminal, title);
 
+    window_title_bar_layout_icons(window);
+
+    struct framebuffer_pixel icon_ink = {0};
+    icon_ink.red = 0x96;
+    icon_ink.green = 0x96;
+    icon_ink.blue = 0x96;
+
+    // Minimize glyph: a short horizontal bar near the bottom of its slot.
+    graphics_draw_rect(window->title_bar_graphics,
+                        window->title_bar_components.minimize_btn.x + 2,
+                        window->title_bar_components.minimize_btn.y + window->title_bar_components.minimize_btn.height - 4,
+                        window->title_bar_components.minimize_btn.width - 4, 2, icon_ink);
+
+    // Maximize glyph: a hollow square outline.
+    size_t inset = 3;
+    size_t ox = window->title_bar_components.maximize_btn.x + inset;
+    size_t oy = window->title_bar_components.maximize_btn.y + inset;
+    size_t ow = window->title_bar_components.maximize_btn.width - (inset * 2);
+    size_t oh = window->title_bar_components.maximize_btn.height - (inset * 2);
+    graphics_draw_rect(window->title_bar_graphics, ox, oy, ow, 2, icon_ink);          // top
+    graphics_draw_rect(window->title_bar_graphics, ox, oy + oh - 2, ow, 2, icon_ink); // bottom
+    graphics_draw_rect(window->title_bar_graphics, ox, oy, 2, oh, icon_ink);          // left
+    graphics_draw_rect(window->title_bar_graphics, ox + ow - 2, oy, 2, oh, icon_ink); // right
+
     // Draw the close icon ignoring white
     struct framebuffer_pixel white_color = {0};
     white_color.red = 0xff;
     white_color.green = 0xff;
     white_color.blue = 0xff;
     terminal_ignore_color(window->title_bar_terminal, white_color);
-    terminal_draw_image(window->title_bar_terminal, icon_pos_x, icon_pos_y, close_icon);
+    terminal_draw_image(window->title_bar_terminal, window->title_bar_components.close_btn.x, window->title_bar_components.close_btn.y, close_icon);
     terminal_ignore_color_finish(window->title_bar_terminal);
 }
 
@@ -214,11 +430,12 @@ void window_set_z_index(struct window *window, int zindex)
 
 void window_unfocus(struct window *old_focused_window)
 {
-    struct framebuffer_pixel black = {0};
-    black.red = 0x00;
-    black.green = 0x00;
-    black.blue = 0x00;
-    window_draw_title_bar(old_focused_window, black);
+    // Unfocused = muted gray, not flat black.
+    struct framebuffer_pixel unfocused_title_bg = {0};
+    unfocused_title_bg.red = 0x3a;
+    unfocused_title_bg.green = 0x3a;
+    unfocused_title_bg.blue = 0x3e;
+    window_draw_title_bar(old_focused_window, unfocused_title_bg);
     graphics_redraw_region(graphics_screen_info(), old_focused_window->root_graphics->starting_x, old_focused_window->root_graphics->starting_y, old_focused_window->root_graphics->width, old_focused_window->root_graphics->height);
 
     struct window_event event = {0};
@@ -259,10 +476,11 @@ void window_focus(struct window *window)
 
     struct window *old_focused_window = focused_window;
     focused_window = window;
-    struct framebuffer_pixel red = {0};
-    red.red = 0xff;
-    red.green = 0x00;
-    red.blue = 0x00;
+    // Focused = slate blue, not alarm-red.
+    struct framebuffer_pixel focused_title_bg = {0};
+    focused_title_bg.red = 0x3a;
+    focused_title_bg.green = 0x5c;
+    focused_title_bg.blue = 0x8f;
 
     if (old_focused_window && old_focused_window->title_bar_graphics)
     {
@@ -272,10 +490,10 @@ void window_focus(struct window *window)
     // Bring the new window to the top
     window_bring_to_top(window);
 
-    // Update the new windows title bar to red
+    // Update the new window's title bar to the focused accent color
     if (window->title_bar_graphics)
     {
-        window_draw_title_bar(window, red);
+        window_draw_title_bar(window, focused_title_bg);
     }
 
     // Force a full redraw of the window
@@ -486,8 +704,20 @@ void window_title_set(struct window *window, const char *title)
 {
     strncpy(window->title, title, sizeof(window->title));
 
-    // black
+    // Keep its current focus color instead of resetting to black.
     struct framebuffer_pixel title_bar_bg_color = {0};
+    if (window == focused_window)
+    {
+        title_bar_bg_color.red = 0x3a;
+        title_bar_bg_color.green = 0x5c;
+        title_bar_bg_color.blue = 0x8f;
+    }
+    else
+    {
+        title_bar_bg_color.red = 0x3a;
+        title_bar_bg_color.green = 0x3a;
+        title_bar_bg_color.blue = 0x3e;
+    }
 
     window_draw_title_bar(window, title_bar_bg_color);
     window_redraw(window);
@@ -547,32 +777,174 @@ void window_title_bar_mouse_moved(struct graphics_info *title_graphics, size_t r
     // do nothing
 }
 
+bool window_title_bar_hit_test(size_t btn_x, size_t btn_y, size_t btn_width, size_t btn_height, size_t rel_x, size_t rel_y)
+{
+    return rel_x >= btn_x && rel_x < btn_x + btn_width &&
+           rel_y >= btn_y && rel_y < btn_y + btn_height;
+}
+
+// Resizes/repositions a window: reallocates all its buffers, then redraws it.
+void window_resize(struct window *window, size_t new_x, size_t new_y, size_t new_width, size_t new_height)
+{
+    if (!window)
+    {
+        return;
+    }
+
+    size_t old_screen_x = window->root_graphics->starting_x;
+    size_t old_screen_y = window->root_graphics->starting_y;
+    size_t old_total_width = window->root_graphics->width;
+    size_t old_total_height = window->root_graphics->height;
+
+    bool has_chrome = !(window->flags & WINDOW_FLAG_BORDERLESS);
+
+    size_t total_width_bounds = new_width;
+    size_t total_height_bounds = new_height;
+    size_t body_x_offset = 0;
+    size_t body_y_offset = 0;
+    if (has_chrome)
+    {
+        total_width_bounds += WINDOW_BORDER_PIXEL_SIZE * 2;
+        total_height_bounds += WINDOW_TITLE_BAR_HEIGHT + WINDOW_BORDER_PIXEL_SIZE;
+        body_y_offset = WINDOW_TITLE_BAR_HEIGHT;
+        body_x_offset = WINDOW_BORDER_PIXEL_SIZE;
+    }
+
+    graphics_info_resize(window->root_graphics, new_x, new_y, total_width_bounds, total_height_bounds);
+    window->x = new_x;
+    window->y = new_y;
+    window->width = new_width;
+    window->height = new_height;
+
+    if (has_chrome)
+    {
+        graphics_info_resize(window->title_bar_graphics, WINDOW_BORDER_PIXEL_SIZE, 0, new_width, WINDOW_TITLE_BAR_HEIGHT);
+        graphics_info_resize(window->border_left_graphics, 0, WINDOW_TITLE_BAR_HEIGHT, WINDOW_BORDER_PIXEL_SIZE, new_height);
+        graphics_info_resize(window->border_right_graphics, total_width_bounds - WINDOW_BORDER_PIXEL_SIZE, WINDOW_TITLE_BAR_HEIGHT, WINDOW_BORDER_PIXEL_SIZE, new_height);
+        graphics_info_resize(window->border_bottom_graphics, 0, total_height_bounds - WINDOW_BORDER_PIXEL_SIZE, new_width, WINDOW_BORDER_PIXEL_SIZE);
+    }
+
+    graphics_info_resize(window->graphics, body_x_offset, body_y_offset, new_width, new_height);
+
+    // abs_x/abs_y stay 0 (local offset, not screen position) — only size changes.
+    window->terminal->bounds.width = new_width;
+    window->terminal->bounds.height = new_height;
+    window->terminal->text.row = 0;
+    window->terminal->text.col = 0;
+
+    struct framebuffer_pixel bg_color = {0};
+    bg_color.red = 0xff;
+    bg_color.blue = 0xff;
+    bg_color.green = 0xff;
+    terminal_draw_rect(window->terminal, 0, 0, new_width, new_height, bg_color);
+
+    if (window->terminal->terminal_background)
+    {
+        kfree(window->terminal->terminal_background);
+        window->terminal->terminal_background = NULL;
+    }
+    terminal_background_save(window->terminal);
+
+    if (window->flags & WINDOW_FLAG_BACKGROUND_TRANSPARENT)
+    {
+        terminal_transparency_key_set(window->terminal, bg_color);
+    }
+
+    if (has_chrome)
+    {
+        window->title_bar_terminal->bounds.width = total_width_bounds;
+        window->title_bar_terminal->bounds.height = WINDOW_TITLE_BAR_HEIGHT;
+
+        struct framebuffer_pixel title_bar_bg_color = {0};
+        if (window == focused_window)
+        {
+            title_bar_bg_color.red = 0x3a;
+            title_bar_bg_color.green = 0x5c;
+            title_bar_bg_color.blue = 0x8f;
+        }
+        else
+        {
+            title_bar_bg_color.red = 0x3a;
+            title_bar_bg_color.green = 0x3a;
+            title_bar_bg_color.blue = 0x3e;
+        }
+        window_draw_title_bar(window, title_bar_bg_color);
+
+        struct framebuffer_pixel border_color = {0};
+        border_color.red = 0x20;
+        border_color.green = 0x20;
+        border_color.blue = 0x24;
+        graphics_draw_rect(window->border_left_graphics, 0, 0, window->border_left_graphics->width, window->border_left_graphics->height, border_color);
+        graphics_draw_rect(window->border_right_graphics, 0, 0, window->border_right_graphics->width, window->border_right_graphics->height, border_color);
+        graphics_draw_rect(window->border_bottom_graphics, 0, 0, window->border_bottom_graphics->width, window->border_bottom_graphics->height, border_color);
+    }
+
+    graphics_redraw_region(graphics_screen_info(), old_screen_x, old_screen_y, old_total_width, old_total_height);
+    window_redraw(window);
+}
+
+void window_maximize_toggle(struct window *window)
+{
+    if (!window)
+    {
+        return;
+    }
+
+    if (!window->is_maximized)
+    {
+        window->saved_x = window->x;
+        window->saved_y = window->y;
+        window->saved_width = window->width;
+        window->saved_height = window->height;
+
+        struct graphics_info *screen = graphics_screen_info();
+        bool has_chrome = !(window->flags & WINDOW_FLAG_BORDERLESS);
+        size_t chrome_extra_width = has_chrome ? (WINDOW_BORDER_PIXEL_SIZE * 2) : 0;
+        size_t chrome_extra_height = has_chrome ? (WINDOW_TITLE_BAR_HEIGHT + WINDOW_BORDER_PIXEL_SIZE) : 0;
+
+        size_t available_height = screen->height - WINDOW_DOCK_HEIGHT;
+        size_t new_body_width = screen->width - chrome_extra_width;
+        size_t new_body_height = available_height - chrome_extra_height;
+
+        window_resize(window, 0, 0, new_body_width, new_body_height);
+        window->is_maximized = true;
+    }
+    else
+    {
+        window_resize(window, window->saved_x, window->saved_y, window->saved_width, window->saved_height);
+        window->is_maximized = false;
+    }
+}
+
 void window_title_bar_clicked(struct graphics_info *title_graphics, size_t rel_x, size_t rel_y, MOUSE_CLICK_TYPE type)
 {
     struct window *win = window_get_from_graphics(title_graphics);
     if (win)
     {
-        size_t close_btn_x = win->title_bar_components.close_btn.x;
-        size_t close_btn_y = win->title_bar_components.close_btn.y;
-        size_t close_btn_width = win->title_bar_components.close_btn.width;
-        size_t close_btn_height = win->title_bar_components.close_btn.height;
-        size_t close_btn_ending_x = close_btn_x + close_btn_width;
-        size_t close_btn_ending_y = close_btn_y + close_btn_height;
-        if (rel_x >= close_btn_x &&
-            rel_x < close_btn_ending_x &&
-            rel_y >= close_btn_y &&
-            rel_y < close_btn_ending_y)
+        if (window_title_bar_hit_test(win->title_bar_components.close_btn.x, win->title_bar_components.close_btn.y,
+                                       win->title_bar_components.close_btn.width, win->title_bar_components.close_btn.height, rel_x, rel_y))
         {
             window_close(win);
             win = NULL;
         }
+        else if (window_title_bar_hit_test(win->title_bar_components.minimize_btn.x, win->title_bar_components.minimize_btn.y,
+                                            win->title_bar_components.minimize_btn.width, win->title_bar_components.minimize_btn.height, rel_x, rel_y))
+        {
+            window_hide(win);
+        }
+        else if (window_title_bar_hit_test(win->title_bar_components.maximize_btn.x, win->title_bar_components.maximize_btn.y,
+                                            win->title_bar_components.maximize_btn.width, win->title_bar_components.maximize_btn.height, rel_x, rel_y))
+        {
+            window_maximize_toggle(win);
+        }
         else
         {
-            // Start dragging on press; window_release_handler() below drops it
-            // the instant the button actually comes back up. Bring-to-top
-            // happens once here, not on every move tick of the drag.
-            window_moving = win;
+            // No dragging while maximized — nowhere to drag it to.
             window_bring_to_top(win);
+            if (!win->is_maximized)
+            {
+                window_moving = win;
+            }
         }
     }
 }
@@ -699,6 +1071,10 @@ struct window *window_create(struct graphics_info *graphics_info, struct font *f
             res = -ENOMEM;
             goto out;
         }
+
+        window->border_left_graphics = border_left_graphics_info;
+        window->border_right_graphics = border_right_graphics_info;
+        window->border_bottom_graphics = border_bottom_graphics_info;
     }
 
     struct graphics_info *window_graphics_info = graphics_info_create_relative(root_graphics_info, window_body_width_offset, window_body_height_offset, width, height, 0);
@@ -725,8 +1101,11 @@ struct window *window_create(struct graphics_info *graphics_info, struct font *f
         }
     }
 
+    // Body text: dark neutral, not red.
     struct framebuffer_pixel pixel_color = {0};
-    pixel_color.red = 0xff;
+    pixel_color.red = 0x2a;
+    pixel_color.green = 0x2a;
+    pixel_color.blue = 0x2e;
     window->terminal = terminal_create(window_graphics_info, 0, 0, width, height, font, pixel_color, TERMINAL_FLAG_BACKSPACE_ALLOWED);
     if (!window->terminal)
     {
@@ -750,22 +1129,19 @@ struct window *window_create(struct graphics_info *graphics_info, struct font *f
 
     if (!(flags & WINDOW_FLAG_BORDERLESS))
     {
-        size_t icon_pos_x = window->title_bar_terminal->bounds.width - close_icon->width - (close_icon->width / 2);
-        size_t icon_pos_y = (window->title_bar_terminal->bounds.height / 2) - (close_icon->height / 2);
-
-        window->title_bar_components.close_btn.x = icon_pos_x;
-        window->title_bar_components.close_btn.y = icon_pos_y;
-        window->title_bar_components.close_btn.width = close_icon->width;
-        window->title_bar_components.close_btn.height = close_icon->height;
-
+        // Starts unfocused-colored; window_draw_title_bar() lays out the icons.
         struct framebuffer_pixel title_bar_bg_color = {0};
-        title_bar_bg_color.red = 0x00;
-        title_bar_bg_color.blue = 0x00;
-        title_bar_bg_color.green = 0x00;
+        title_bar_bg_color.red = 0x3a;
+        title_bar_bg_color.blue = 0x3e;
+        title_bar_bg_color.green = 0x3a;
 
         window_draw_title_bar(window, title_bar_bg_color);
 
+        // Soft dark border instead of harsh pure black.
         struct framebuffer_pixel border_color = {0};
+        border_color.red = 0x20;
+        border_color.green = 0x20;
+        border_color.blue = 0x24;
         graphics_draw_rect(border_left_graphics_info, 0, 0, border_left_graphics_info->width, border_left_graphics_info->height, border_color);
         graphics_draw_rect(border_right_graphics_info, 0, 0, border_right_graphics_info->width, border_right_graphics_info->height, border_color);
         graphics_draw_rect(border_bottom_graphics_info, 0, 0, border_bottom_graphics_info->width, border_bottom_graphics_info->height, border_color);

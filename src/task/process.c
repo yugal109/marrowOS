@@ -324,6 +324,9 @@ struct process_window *process_window_create(struct process *process, char *titl
     // Register the window event handler
     window_event_handler_register(proc_win->kernel_win, process_window_event_handler);
 
+    // Give it a dock icon so it can be minimized/restored
+    window_dock_register_target(proc_win->kernel_win);
+
     vector_push(process->windows, &proc_win);
 out:
     if (res < 0)
