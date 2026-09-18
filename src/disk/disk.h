@@ -1,6 +1,7 @@
 #ifndef DISK_H
 #define DISK_H
 #include "fs/file.h"
+#include "driver.h"
 #include <stdint.h>
 
 typedef unsigned int MARROWOS_DISK_TYPE;
@@ -12,6 +13,7 @@ typedef unsigned int MARROWOS_DISK_TYPE;
 #define MARROWOS_DISK_TYPE_PARTITION 1
 #define MARROWOS_KERNEL_FILESYSTEM_NAME "MARROW     "
 
+struct disk_driver;
 struct disk
 {
     MARROWOS_DISK_TYPE type;
@@ -22,21 +24,28 @@ struct disk
 
     struct filesystem *filesystem;
 
+    struct disk_driver *driver;
+
+    // the hardware disk this disk is attached too
+    struct disk *hardware_disk;
+
     // set both to zero fro the primary disk
     // all bounds checking is ignored if set to zero.
     size_t starting_lba;
     size_t ending_lba;
 
-    // ATA position, partitions inherit these from their physical disk
-    uint16_t io_base;
-    uint16_t ctrl_base;
-    uint8_t drive_select;
-
     // The private data of our filesystem
     void *fs_private;
+
+    // private data known by the disk driver in relation to the disk
+    void *driver_private;
 };
 
-int disk_create_new(int type, uint16_t io_base, uint16_t ctrl_base, uint8_t drive_select, int starting_lba, int ending_lba, size_t sector_size, struct disk **disk_out);
+struct disk *disk_hardware_disk(struct disk *disk);
+int disk_create_new(struct disk_driver *driver, struct disk *hardware_disk, int type, int starting_lba, int ending_lba, size_t sector_size, void *driver_private_data, struct disk **disk_out);
+int disk_create_partition(struct disk *disk, int starting_lba, int ending_lba, struct disk **partition_disk_out);
+int disk_filesystem_mount(struct disk *disk);
+void *disk_private_data_driver(struct disk *disk);
 void disk_search_and_init();
 size_t disk_total();
 struct disk *disk_get(int index);

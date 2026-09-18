@@ -68,14 +68,18 @@ int gpt_mount_partitions(struct gpt_partition_table_header *partition_header)
         }
 
         // We have the entry, lets create a virtual disk
-        res = disk_create_new(MARROWOS_DISK_TYPE_PARTITION, gpt_primary_disk->io_base, gpt_primary_disk->ctrl_base,
-                              gpt_primary_disk->drive_select, entry->starting_lba, entry->ending_lba, gpt_primary_disk->sector_size, NULL);
+        struct disk *partition_disk = NULL;
+        res = disk_create_partition(gpt_primary_disk, entry->starting_lba, entry->ending_lba, &partition_disk);
         if (res < 0)
         {
             goto out;
         }
-        // WARNING: CODE WONT COMPILE YET, UNTIL WE IMPLEMENT VIRTUAL DISKS
-        // IN THE DISK FUNCTIONALITY
+
+        res = disk_filesystem_mount(partition_disk);
+        if (res < 0)
+        {
+            goto out;
+        }
         // We have mounted the partition as a virtual disk.
     }
 out:
