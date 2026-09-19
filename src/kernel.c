@@ -217,13 +217,6 @@ void kernel_main()
     // initialize stage two graphics setup
     graphics_setup_stage_two(&default_graphics_info);
 
-    // Must come before window_system_initialize_stage2: that registers a
-    // keyboard listener, which silently no-ops if no keyboard exists yet.
-    keyboard_init();
-
-    // Initialize window system stage two
-    window_system_initialize_stage2();
-
     struct font *font = font_get_system_font();
     if (!font)
     {
@@ -249,6 +242,13 @@ void kernel_main()
     graphics_draw_image_scaled(screen_info, img, 0, 0, screen_info->width, screen_info->height);
     graphics_redraw_all();
     terminal_background_save(system_terminal);
+
+    // Dock draws right after the wallpaper, not before it, so the two
+    // appear together instead of the dock sitting alone on a blank screen.
+    // Must come before window_system_initialize_stage2: that registers a
+    // keyboard listener, which silently no-ops if no keyboard exists yet.
+    keyboard_init();
+    window_system_initialize_stage2();
 
     // Allocate a 1 MB stack for the kernel IDT
     size_t stack_size = 1024 * 1024;
@@ -286,10 +286,6 @@ void kernel_main()
     // {
     //     print("Window creation issue\n");
     // }
-
-    print("Total PCI devices:");
-    print(itoa((int)pci_device_count()));
-    print("\n");
 
     // print("Loading program...\n");
     struct process *process = 0;
