@@ -244,6 +244,12 @@ out:
 void process_print_char(struct process *process, char c)
 {
     struct process_window *printing_process_win = process->sysout_win;
+    if (!printing_process_win)
+    {
+        // Stdout was never diverted to a window, nothing to print to.
+        return;
+    }
+
     struct terminal *win_term = window_terminal(printing_process_win->kernel_win);
     if (win_term)
     {
@@ -254,6 +260,11 @@ void process_print_char(struct process *process, char c)
 void process_print(struct process *process, const char *message)
 {
     struct process_window *printing_process_win = process->sysout_win;
+    if (!printing_process_win)
+    {
+        return;
+    }
+
     struct terminal *win_term = window_terminal(printing_process_win->kernel_win);
     if (win_term)
     {
@@ -700,6 +711,11 @@ static void process_unlink(struct process *process)
 
 void process_window_closed(struct process *process, struct process_window *proc_win)
 {
+    // proc_win is freed below; stop printing into it.
+    if (process->sysout_win == proc_win)
+    {
+        process->sysout_win = NULL;
+    }
 
     // pop it from the process window vector
     vector_pop_element(process->windows, &proc_win, sizeof(proc_win));
@@ -940,6 +956,23 @@ static int process_map_elf(struct process *process)
         {
             flags |= PAGING_IS_WRITEABLE;
         }
+
+        // bytes past p_filesz are .bss; zero them or globals start with garbage
+        if (phdr->p_memsz > phdr->p_filesz)
+        {
+            uintptr_t buf_end = (uintptr_t)elf_file->elf_memory + elf_file->in_memory_size;
+            uintptr_t bss_start = (uintptr_t)phdr_phys_address + phdr->p_filesz;
+            uintptr_t bss_end = (uintptr_t)phdr_phys_address + phdr->p_memsz;
+            if (bss_end > buf_end)
+            {
+                bss_end = buf_end;
+            }
+            if (bss_start < bss_end)
+            {
+                memset((void *)bss_start, 0x00, bss_end - bss_start);
+            }
+        }
+
         res = paging_map_to(process->paging_desc, paging_align_to_lower_page((void *)(uintptr_t)phdr->p_vaddr), paging_align_to_lower_page(phdr_phys_address), paging_align_address(phdr_phys_address + phdr->p_memsz), flags);
         if (ISERR(res))
         {

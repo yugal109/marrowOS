@@ -120,7 +120,7 @@ void gui_element_textfield_draw(struct gui_element *gui_element)
     int x_pos = gui_element->width / 2;
 
     // Default alignment is TOP, with y_pos zero
-    int y_pos = 0;
+    int y_pos = TEXTFIELD_PADDING;
     if (private->text_alignment.vertical == GUI_TEXTFIELD_VERTICAL_ALIGNMENT_CENTER)
     {
         y_pos = gui_element->height / 2;
@@ -139,13 +139,13 @@ void gui_element_textfield_draw(struct gui_element *gui_element)
         gui_element_draw_rect(gui_element, 0, 0, gui_element->width, gui_element->height, &bg_color);
     }
 
-    x_pos = 0;
+    x_pos = TEXTFIELD_PADDING;
 
     struct framebuffer_pixel colour = private->text.color;
 
     if (private->flags & GUI_TEXTFIELD_IS_MULTILINE_FLAG)
     {
-        font_draw_text_wrap(gui_element->graphics, NULL, x_pos, y_pos, gui_element->width, gui_element->height, private->text.text, colour);
+        font_draw_text_wrap(gui_element->graphics, NULL, x_pos, y_pos, gui_element->width - TEXTFIELD_PADDING, gui_element->height, private->text.text, colour);
     }
     else
     {

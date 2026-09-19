@@ -23,6 +23,7 @@
 #include "task/tss.h"
 #include "fs/file.h"
 #include "idt/idt.h"
+#include "idt/irq.h"
 #include "status.h"
 #include "isr80h/isr80h.h"
 #include "keyboard/keyboard.h"
@@ -297,6 +298,9 @@ void kernel_main()
     {
         panic("Failed to load user program\n");
     }
+
+    // unmask timer IRQ0, or tasks never switch
+    IRQ_enable(IRQ_TIMER);
 
     // Drop to user land
     task_run_first_ever_task();

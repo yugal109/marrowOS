@@ -165,7 +165,8 @@ int gui_process_event_mouse_click(struct gui *gui, struct window_event *win_even
 
 int gui_process_event_window_close(struct gui *gui, struct window_event *win_event)
 {
-    return 0;
+    // window already freed; end gui_process() so the app exits
+    return -1;
 }
 
 int gui_process_event_keypress(struct gui *gui, struct window_event *win_event)

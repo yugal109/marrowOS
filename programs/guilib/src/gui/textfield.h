@@ -10,6 +10,7 @@ struct gui_element;
 struct font;
 
 #define TEXTFIELD_DEFAULT_BUFFER_SIZE 128
+#define TEXTFIELD_PADDING 8
 
 enum
 {

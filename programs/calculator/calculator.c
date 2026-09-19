@@ -243,7 +243,7 @@ int main(int argc, char **argv)
     }
 
     int padding = 10;
-    int textfield_height = 50;
+    int textfield_height = 100;
     int button_height = 50;
 
     int textfield_width = main_win->width - (padding * 2);

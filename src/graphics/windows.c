@@ -198,6 +198,9 @@ void window_show(struct window *window)
 #define WINDOW_DOCK_ZINDEX 200000
 #define WINDOW_DOCK_TOTAL_ICONS 5
 
+// PS/2 fires click on every packet while held, so latch to act once.
+static bool dock_click_active = false;
+
 static struct window *dock_window = NULL;
 // Window each icon toggles, once its process has launched and created one.
 static struct window *dock_target_windows[WINDOW_DOCK_TOTAL_ICONS] = {0};
@@ -276,8 +279,19 @@ void window_dock_icon_redraw()
     window_redraw(dock_window);
 }
 
+void window_dock_release_handler(struct mouse *mouse, int released_x, int released_y, MOUSE_CLICK_TYPE type)
+{
+    dock_click_active = false;
+}
+
 void window_dock_body_clicked(struct graphics_info *graphics, size_t rel_x, size_t rel_y, MOUSE_CLICK_TYPE type)
 {
+    if (dock_click_active)
+    {
+        // Still the same held-down click, already handled it.
+        return;
+    }
+
     if (!dock_icons[0])
     {
         return;
@@ -303,6 +317,8 @@ void window_dock_body_clicked(struct graphics_info *graphics, size_t rel_x, size
         // Empty dock space, do nothing.
         return;
     }
+
+    dock_click_active = true;
 
     if (dock_target_windows[clicked_slot])
     {
@@ -346,6 +362,7 @@ void window_dock_initialize()
 
     window_set_z_index(dock_window, WINDOW_DOCK_ZINDEX);
     graphics_click_handler_set(dock_window->graphics, window_dock_body_clicked);
+    mouse_register_release_handler(NULL, window_dock_release_handler);
     window_dock_icon_redraw();
 }
 
@@ -577,6 +594,17 @@ void window_drop_event_handlers(struct window *window)
 
 void window_free(struct window *window)
 {
+    // Don't leave the dock pointing at freed memory.
+    bool dock_changed = false;
+    for (int i = 0; i < WINDOW_DOCK_TOTAL_ICONS; i++)
+    {
+        if (dock_target_windows[i] == window)
+        {
+            dock_target_windows[i] = NULL;
+            dock_changed = true;
+        }
+    }
+
     // drop the event handlers
     window_drop_event_handlers(window);
     // free the event handlers vector
@@ -592,6 +620,11 @@ void window_free(struct window *window)
     // Free the root graphics which will free aall children
     graphics_info_free(window->root_graphics);
     kfree(window);
+
+    if (dock_changed)
+    {
+        window_dock_icon_redraw();
+    }
 }
 
 void window_event_push(struct window *window, struct window_event *event)
