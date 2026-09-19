@@ -3,6 +3,8 @@
 
 #include "config.h"
 #include "memory/paging/paging.h"
+#include "io/tsc.h"
+#include <stdbool.h>
 
 struct interrupt_frame;
 struct registers
@@ -31,6 +33,12 @@ struct task
     // The process of the task
     struct process *process;
 
+    struct
+    {
+        // The TSC time this task is allowed to resume at.
+        TIME_MICROSECONDS sleep_until_microseconds;
+    } sleeping;
+
     // The next task in the linked list
     struct task *next;
 
@@ -58,6 +66,10 @@ int copy_string_from_task(struct task *task, void *virtual, void *phys, int max)
 void *task_get_stack_item(struct task *task, int index);
 void *task_virtual_address_to_physical(struct task *task, void *virtual_address);
 void task_next();
+
+void task_sleep(struct task *task, TIME_MICROSECONDS microseconds);
+bool task_asleep(struct task *task);
+int task_get_next_non_sleeping_task(struct task **task_out);
 
 struct paging_desc *task_paging_desc(struct task *task);
 struct paging_desc *task_current_paging_desc();

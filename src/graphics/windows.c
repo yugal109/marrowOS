@@ -199,7 +199,8 @@ void window_show(struct window *window)
 #define WINDOW_DOCK_TOTAL_ICONS 5
 
 static struct window *dock_window = NULL;
-static struct window *dock_target_window = NULL;
+// Window each icon toggles, once its process has launched and created one.
+static struct window *dock_target_windows[WINDOW_DOCK_TOTAL_ICONS] = {0};
 static struct image *dock_icons[WINDOW_DOCK_TOTAL_ICONS] = {0};
 static const char *dock_icon_paths[WINDOW_DOCK_TOTAL_ICONS] = {
     "@:/terminal.bmp",
@@ -207,6 +208,14 @@ static const char *dock_icon_paths[WINDOW_DOCK_TOTAL_ICONS] = {
     "@:/editor.bmp",
     "@:/calc.bmp",
     "@:/music.bmp",
+};
+// ELF each icon launches on first click; NULL means the icon does nothing yet.
+static const char *dock_program_paths[WINDOW_DOCK_TOTAL_ICONS] = {
+    NULL,
+    NULL,
+    NULL,
+    "@:/calc.elf",
+    NULL,
 };
 
 size_t window_dock_icon_x(int index)
@@ -241,47 +250,81 @@ void window_dock_icon_redraw()
     }
     terminal_ignore_color_finish(dock_window->terminal);
 
-    // Dot under the icon: green if the window is visible, else blends into white bg.
-    bool is_visible = dock_target_window && !dock_target_window->root_graphics->hidden;
-    struct framebuffer_pixel dot_color = white;
-    if (is_visible)
+    // Dot under each icon: green if that icon's window is visible, else
+    // blends into the white background.
+    for (int i = 0; i < WINDOW_DOCK_TOTAL_ICONS; i++)
     {
-        dot_color.red = 0x5b;
-        dot_color.green = 0xd6;
-        dot_color.blue = 0x7a;
-    }
+        if (!dock_icons[i])
+        {
+            continue;
+        }
 
-    size_t dot_x = window_dock_icon_x(0) + (icon_size / 2) - (WINDOW_DOCK_DOT_SIZE / 2);
-    size_t dot_y = icon_y + icon_size + 4;
-    graphics_draw_rect_rounded(dock_window->graphics, dot_x, dot_y, WINDOW_DOCK_DOT_SIZE, WINDOW_DOCK_DOT_SIZE, WINDOW_DOCK_DOT_SIZE / 2, dot_color, white);
+        bool is_visible = dock_target_windows[i] && !dock_target_windows[i]->root_graphics->hidden;
+        struct framebuffer_pixel dot_color = white;
+        if (is_visible)
+        {
+            dot_color.red = 0x5b;
+            dot_color.green = 0xd6;
+            dot_color.blue = 0x7a;
+        }
+
+        size_t dot_x = window_dock_icon_x(i) + (icon_size / 2) - (WINDOW_DOCK_DOT_SIZE / 2);
+        size_t dot_y = icon_y + icon_size + 4;
+        graphics_draw_rect_rounded(dock_window->graphics, dot_x, dot_y, WINDOW_DOCK_DOT_SIZE, WINDOW_DOCK_DOT_SIZE, WINDOW_DOCK_DOT_SIZE / 2, dot_color, white);
+    }
 
     window_redraw(dock_window);
 }
 
 void window_dock_body_clicked(struct graphics_info *graphics, size_t rel_x, size_t rel_y, MOUSE_CLICK_TYPE type)
 {
-    if (!dock_target_window || !dock_icons[0])
+    if (!dock_icons[0])
     {
         return;
     }
 
     size_t icon_size = dock_icons[0]->width;
-    size_t icon_x = window_dock_icon_x(0);
     size_t icon_y = (WINDOW_DOCK_HEIGHT - icon_size) / 2;
-    if (rel_x < icon_x || rel_x >= icon_x + icon_size ||
-        rel_y < icon_y || rel_y >= icon_y + icon_size)
+
+    int clicked_slot = -1;
+    for (int i = 0; i < WINDOW_DOCK_TOTAL_ICONS; i++)
     {
-        // Other icons / empty dock space do nothing.
+        size_t icon_x = window_dock_icon_x(i);
+        if (rel_x >= icon_x && rel_x < icon_x + icon_size &&
+            rel_y >= icon_y && rel_y < icon_y + icon_size)
+        {
+            clicked_slot = i;
+            break;
+        }
+    }
+
+    if (clicked_slot < 0)
+    {
+        // Empty dock space, do nothing.
         return;
     }
 
-    if (dock_target_window->root_graphics->hidden)
+    if (dock_target_windows[clicked_slot])
     {
-        window_show(dock_target_window);
+        // Already launched, toggle it.
+        if (dock_target_windows[clicked_slot]->root_graphics->hidden)
+        {
+            window_show(dock_target_windows[clicked_slot]);
+        }
+        else
+        {
+            window_hide(dock_target_windows[clicked_slot]);
+        }
     }
-    else
+    else if (dock_program_paths[clicked_slot])
     {
-        window_hide(dock_target_window);
+        // First click on this icon, launch its program.
+        struct process *process = NULL;
+        int res = process_load_switch(dock_program_paths[clicked_slot], &process);
+        if (res == MARROWOS_ALL_OK)
+        {
+            process->dock_slot = clicked_slot;
+        }
     }
 
     window_dock_icon_redraw();
@@ -306,9 +349,14 @@ void window_dock_initialize()
     window_dock_icon_redraw();
 }
 
-void window_dock_register_target(struct window *target)
+void window_dock_register_target_slot(int slot, struct window *target)
 {
-    dock_target_window = target;
+    if (slot < 0 || slot >= WINDOW_DOCK_TOTAL_ICONS)
+    {
+        return;
+    }
+
+    dock_target_windows[slot] = target;
     window_dock_icon_redraw();
 }
 

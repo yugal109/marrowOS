@@ -1,7 +1,8 @@
 # FILES = ./build/kernel.asm.o ./build/kernel.o ./build/disk/disk.o ./build/idt/idt.asm.o ./build/memory/memory.o ./build/idt/idt.o ./build/keyboard/keyboard.o ./build/keyboard/classic.o ./build/isr80h/isr80h.o ./build/isr80h/process.o ./build/isr80h/heap.o ./build/isr80h/misc.o ./build/isr80h/io.o ./build/task/task.o ./build/task/task.asm.o ./build/task/process.o ./build/loader/formats/elf.o ./build/loader/formats/elfloader.o ./build/io/io.asm.o ./build/gdt/gdt.asm.o ./build/gdt/gdt.o ./build/task/tss.asm.o ./build/memory/heap/heap.o ./build/memory/heap/kheap.o ./build/fs/pparser.o ./build/fs/file.o ./build/fs/fat/fat16.o ./build/string/string.o ./build/disk/streamer.o ./build/memory/paging/paging.o ./build/memory/paging/paging.asm.o
 #FILES = ./build/kernel.asm.o ./build/kernel.o ./build/loader/formats/elf.o ./build/loader/formats/elfloader.o  ./build/isr80h/isr80h.o ./build/isr80h/process.o ./build/isr80h/heap.o ./build/keyboard/keyboard.o ./build/keyboard/classic.o ./build/isr80h/io.o ./build/isr80h/misc.o ./build/disk/disk.o ./build/disk/streamer.o ./build/task/process.o ./build/task/task.o ./build/task/task.asm.o ./build/task/tss.asm.o ./build/fs/pparser.o ./build/fs/file.o ./build/fs/fat/fat16.o ./build/string/string.o ./build/idt/idt.asm.o ./build/idt/idt.o ./build/memory/memory.o ./build/io/io.asm.o ./build/gdt/gdt.o ./build/gdt/gdt.asm.o ./build/memory/heap/heap.o ./build/memory/heap/kheap.o ./build/memory/paging/paging.o ./build/memory/paging/paging.asm.o
-FILES = ./build/kernel.asm.o ./build/kernel.o ./build/mouse/mouse.o ./build/mouse/ps2mouse.o ./build/io/pci.o ./build/io/tsc.asm.o ./build/io/tsc.o  ./build/io/cpuid.o ./build/graphics/windows.o ./build/graphics/terminal.o ./build/graphics/font.o ./build/graphics/graphics.o ./build/graphics/image/image.o ./build/graphics/image/bmp.o ./build/disk/gpt.o ./build/disk/driver.o ./build/disk/drivers/nvme.o ./build/disk/drivers/pata.o ./build/lib/vector/vector.o ./build/idt/irq.o ./build/loader/formats/elf.o ./build/loader/formats/elfloader.o ./build/isr80h/isr80h.o ./build/isr80h/io.o ./build/isr80h/heap.o ./build/isr80h/misc.o ./build/isr80h/window.o ./build/isr80h/graphics.o ./build/isr80h/file.o ./build/isr80h/process.o ./build/keyboard/keyboard.o ./build/keyboard/classic.o ./build/gdt/gdt.o ./build/disk/disk.o ./build/disk/streamer.o ./build/fs/fat/fat16.o ./build/fs/file.o ./build/fs/pparser.o ./build/task/process.o ./build/task/userlandptr.o ./build/task/task.o ./build/memory/heap/multiheap.o ./build/memory/paging/paging.o  ./build/idt/idt.o ./build/idt/idt.asm.o ./build/task/tss.asm.o ./build/task/task.asm.o ./build/memory/paging/paging.asm.o ./build/io/io.asm.o ./build/string/string.o ./build/memory/heap/heap.o ./build/memory/heap/kheap.o ./build/memory/memory.o
+FILES = ./build/kernel.asm.o ./build/kernel.o ./build/mouse/mouse.o ./build/mouse/ps2mouse.o ./build/io/pci.o ./build/io/tsc.asm.o ./build/io/tsc.o  ./build/io/cpuid.o ./build/graphics/windows.o ./build/graphics/terminal.o ./build/graphics/font.o ./build/graphics/graphics.o ./build/graphics/image/image.o ./build/graphics/image/bmp.o ./build/disk/gpt.o ./build/disk/driver.o ./build/disk/drivers/nvme.o ./build/disk/drivers/pata.o ./build/lib/vector/vector.o ./build/idt/irq.o ./build/loader/formats/elf.o ./build/loader/formats/elfloader.o ./build/isr80h/isr80h.o ./build/isr80h/io.o ./build/isr80h/heap.o ./build/isr80h/misc.o ./build/isr80h/window.o ./build/isr80h/graphics.o ./build/isr80h/time.o ./build/isr80h/file.o ./build/isr80h/process.o ./build/keyboard/keyboard.o ./build/keyboard/classic.o ./build/gdt/gdt.o ./build/disk/disk.o ./build/disk/streamer.o ./build/fs/fat/fat16.o ./build/fs/file.o ./build/fs/pparser.o ./build/task/process.o ./build/task/userlandptr.o ./build/task/task.o ./build/memory/heap/multiheap.o ./build/memory/paging/paging.o  ./build/idt/idt.o ./build/idt/idt.asm.o ./build/task/tss.asm.o ./build/task/task.asm.o ./build/memory/paging/paging.asm.o ./build/io/io.asm.o ./build/string/string.o ./build/memory/heap/heap.o ./build/memory/heap/kheap.o ./build/memory/memory.o
 $(FILES): | directories
+.PHONY: all clean user_programs user_programs_clean directories
 INCLUDES = -I./src
 FLAGS = -g -ffreestanding -falign-jumps -falign-functions -falign-labels -falign-loops -fstrength-reduce -fomit-frame-pointer -finline-functions -Wno-unused-function -fno-builtin -Werror -Wno-unused-label -Wno-cpp -Wno-unused-parameter -nostdlib -nostartfiles -nodefaultlibs -Wall -O0 -Iinc
 
@@ -24,6 +25,7 @@ all: directories ./bin/boot.bin ./bin/kernel.bin user_programs
 	sudo cp ./data/images/sysfont.bmp /mnt/d/sysfont.bmp
 	sudo cp ./programs/blank/blank.elf /mnt/d
 	sudo cp ./programs/shell/shell.elf /mnt/d
+	sudo cp ./programs/calculator/calc.elf /mnt/d
 
 
 directories:
@@ -92,6 +94,9 @@ directories:
 
 ./build/isr80h/graphics.o: ./src/isr80h/graphics.c
 	x86_64-elf-gcc $(INCLUDES) -I./src/isr80h $(FLAGS) -std=gnu99 -c ./src/isr80h/graphics.c -o ./build/isr80h/graphics.o
+
+./build/isr80h/time.o: ./src/isr80h/time.c
+	x86_64-elf-gcc $(INCLUDES) -I./src/isr80h $(FLAGS) -std=gnu99 -c ./src/isr80h/time.c -o ./build/isr80h/time.o
 
 
 ./build/isr80h/file.o: ./src/isr80h/file.c
@@ -216,16 +221,22 @@ directories:
 	x86_64-elf-gcc $(INCLUDES) -I./src/string $(FLAGS) -std=gnu99 -c ./src/string/string.c -o ./build/string/string.o
 
 user_programs:
-	cd ./programs/simple && $(MAKE) all
-	cd ./programs/stdlib && $(MAKE) all
-	cd ./programs/blank && $(MAKE) all
-	cd ./programs/shell && $(MAKE) all
+	$(MAKE) -C ./programs/stdlib all
+	$(MAKE) -C ./programs/containerlib all
+	$(MAKE) -C ./programs/guilib all
+	$(MAKE) -C ./programs/simple all
+	$(MAKE) -C ./programs/blank all
+	$(MAKE) -C ./programs/shell all
+	$(MAKE) -C ./programs/calculator all
 
 user_programs_clean:
-	cd ./programs/simple && $(MAKE) clean
-	cd ./programs/stdlib && $(MAKE) clean
-	cd ./programs/blank && $(MAKE) clean
-	cd ./programs/shell && $(MAKE) clean
+	$(MAKE) -C ./programs/simple clean
+	$(MAKE) -C ./programs/stdlib clean
+	$(MAKE) -C ./programs/containerlib clean
+	$(MAKE) -C ./programs/guilib clean
+	$(MAKE) -C ./programs/blank clean
+	$(MAKE) -C ./programs/shell clean
+	$(MAKE) -C ./programs/calculator clean
 
 clean: user_programs_clean
 	rm -rf ./bin/boot.bin ./bin/kernel.bin ./bin/os.bin

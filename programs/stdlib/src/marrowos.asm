@@ -27,6 +27,7 @@ global marrowos_graphics_create:    function
 global marrowos_window_redraw_region: function
 global marrowos_window_title_set:function
 global marrowos_window_cursor_set:function
+global marrowos_udelay:function
 
 
 ; void print(const char* message)
@@ -255,4 +256,12 @@ marrowos_window_cursor_set:
     push qword 1  ; update type = ISR80H_WINDOW_UPDATE_CURSOR_POSITION
     int 0x80
     add rsp, 32 ; restore the stack
+    ret
+
+; void marrowos_udelay(uint64_t microseconds);
+marrowos_udelay:
+    mov rax, 25 ; command 25 udelay
+    push qword rdi ; microseconds
+    int 0x80
+    add rsp, 8 ; restore the stack
     ret

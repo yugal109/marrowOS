@@ -87,6 +87,11 @@ struct process
     // The process id
     uint16_t id;
 
+    // Dock icon slot that launched this process, or -1 if none did.
+    // Set by the dock click handler; used by process_window_create() to
+    // register the process's first window back to that slot.
+    int dock_slot;
+
     char filename[MARROWOS_MAX_PATH];
 
     // The main process task

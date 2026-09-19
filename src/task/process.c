@@ -39,6 +39,7 @@ void process_system_init()
 static void process_init(struct process *process)
 {
     memset(process, 0, sizeof(struct process));
+    process->dock_slot = -1;
     process->allocations = vector_new(sizeof(struct process_allocation), 10, 0);
     process->file_handles = vector_new(sizeof(struct process_file_handle *), 4, 0);
     process->kernel_userland_ptrs_vector = vector_new(sizeof(struct userland_ptr *), 4, 0);
@@ -324,8 +325,11 @@ struct process_window *process_window_create(struct process *process, char *titl
     // Register the window event handler
     window_event_handler_register(proc_win->kernel_win, process_window_event_handler);
 
-    // Give it a dock icon so it can be minimized/restored
-    window_dock_register_target(proc_win->kernel_win);
+    // If a dock icon launched this process, let that icon toggle this window
+    if (process->dock_slot >= 0)
+    {
+        window_dock_register_target_slot(process->dock_slot, proc_win->kernel_win);
+    }
 
     vector_push(process->windows, &proc_win);
 out:
@@ -472,6 +476,12 @@ void *process_realloc(struct process *process, void *old_virt_ptr, size_t new_si
     void *new_ptr = NULL;
     void *old_phys_ptr = NULL;
     size_t old_allocation_index = 0;
+
+    if (old_virt_ptr == NULL)
+    {
+        return process_malloc(process, new_size);
+    }
+
     res = process_allocation_exists(process, old_virt_ptr, &old_allocation_index);
     if (res < 0)
     {

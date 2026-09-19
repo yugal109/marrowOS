@@ -95,5 +95,6 @@ void marrowos_window_redraw(struct window *window);
 void marrowos_window_title_set(struct window *window, const char *title);
 void marrowos_window_cursor_set(struct window *window, long rel_x, long rel_y);
 void marrowos_window_redraw_region(long rel_x, long rel_y, long rel_width, long rel_height, struct window *window);
+void marrowos_udelay(unsigned long microseconds);
 
 #endif

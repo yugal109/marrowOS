@@ -56,3 +56,53 @@ void yfree(void *ptr)
 {
     marrowos_free(ptr);
 };
+
+void udelay(unsigned long microseconds)
+{
+    marrowos_udelay(microseconds);
+}
+
+void usleep(unsigned long miliseconds)
+{
+    udelay(miliseconds * 1000);
+}
+
+void *malloc(size_t size)
+{
+    return yreserve(size);
+}
+
+void free(void *ptr)
+{
+    yfree(ptr);
+}
+
+int atoi(const char *str)
+{
+    int res = 0;
+    int sign = 1;
+    const char *p = str;
+
+    while (*p == ' ')
+    {
+        p++;
+    }
+
+    if (*p == '-')
+    {
+        sign = -1;
+        p++;
+    }
+    else if (*p == '+')
+    {
+        p++;
+    }
+
+    while (*p >= '0' && *p <= '9')
+    {
+        res = (res * 10) + (*p - '0');
+        p++;
+    }
+
+    return res * sign;
+}

@@ -1,6 +1,7 @@
 #include "stdio.h"
 #include "marrowos.h"
 #include "stdlib.h"
+#include "string.h"
 #include <stdarg.h>
 
 int putchar(int c)
@@ -194,4 +195,48 @@ int printf(const char *fmt, ...)
     }
     va_end(ap);
     return 0;
+}
+
+int sprintf(char *buf, const char *fmt, ...)
+{
+    va_list ap;
+    const char *p;
+    char *sval;
+    int ival;
+    int i = 0;
+    va_start(ap, fmt);
+    for (p = fmt; *p; p++)
+    {
+        if (*p != '%')
+        {
+            buf[i++] = *p;
+            continue;
+        }
+        switch (*++p)
+        {
+        case 'i':
+        case 'd':
+            ival = va_arg(ap, int);
+            strcpy(&buf[i], itoa(ival));
+            i += strlen(&buf[i]);
+            break;
+        case 's':
+            sval = va_arg(ap, char *);
+            strcpy(&buf[i], sval);
+            i += strlen(&buf[i]);
+            break;
+        case 'c':
+            buf[i++] = (char)va_arg(ap, int);
+            break;
+        case '%':
+            buf[i++] = '%';
+            break;
+        default:
+            buf[i++] = *p;
+            break;
+        }
+    }
+    va_end(ap);
+    buf[i] = 0;
+    return i;
 }

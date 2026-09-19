@@ -3,6 +3,7 @@
 #include "fs/file.h"
 #include "driver.h"
 #include <stdint.h>
+#include <stddef.h>
 
 typedef unsigned int MARROWOS_DISK_TYPE;
 
@@ -14,6 +15,7 @@ typedef unsigned int MARROWOS_DISK_TYPE;
 #define MARROWOS_KERNEL_FILESYSTEM_NAME "MARROW     "
 
 struct disk_driver;
+struct disk_stream_cache;
 struct disk
 {
     MARROWOS_DISK_TYPE type;
@@ -28,6 +30,9 @@ struct disk
 
     // the hardware disk this disk is attached too
     struct disk *hardware_disk;
+
+    // Cache for the disk.
+    struct disk_stream_cache *cache;
 
     // set both to zero fro the primary disk
     // all bounds checking is ignored if set to zero.
@@ -52,5 +57,7 @@ struct disk *disk_get(int index);
 int disk_read_block(struct disk *idisk, unsigned int lba, int total, void *buf);
 struct disk *disk_primary_fs_disk();
 struct disk *disk_primary();
+long disk_real_sector(struct disk *idisk, unsigned int lba);
+long disk_real_offset(struct disk *idisk, unsigned int lba);
 
 #endif

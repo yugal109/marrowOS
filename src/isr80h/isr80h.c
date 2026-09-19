@@ -7,6 +7,7 @@
 #include "file.h"
 #include "graphics.h"
 #include "window.h"
+#include "time.h"
 
 void isr80h_register_commands()
 {
@@ -35,4 +36,5 @@ void isr80h_register_commands()
     isr80h_register_command(SYSTEM_COMMAND22_GRAPHICS_CREATE, isr80h_command22_graphics_create);
     isr80h_register_command(SYSTEM_COMMAND23_WINDOW_REDRAW_REGION, isr80h_command23_window_redraw_region);
     isr80h_register_command(SYSTEM_COMMAND24_UPDATE_WINDOW, isr80h_command24_update_window);
+    isr80h_register_command(SYSTEM_COMMAND25_UDELAY, isr80h_command25_udelay);
 }

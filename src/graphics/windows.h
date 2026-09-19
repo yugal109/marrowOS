@@ -146,7 +146,7 @@ void window_hide(struct window *window);
 void window_show(struct window *window);
 void window_resize(struct window *window, size_t new_x, size_t new_y, size_t new_width, size_t new_height);
 void window_maximize_toggle(struct window *window);
-void window_dock_register_target(struct window *target);
+void window_dock_register_target_slot(int slot, struct window *target);
 void window_click(struct window *window, int rel_x, int rel_y, MOUSE_CLICK_TYPE type);
 struct window *window_create(struct graphics_info *graphics_info, struct font *font, const char *title, size_t x, size_t y, size_t width, size_t height, int flags, int id);
 void window_event_handler_register(struct window *window, WINDOW_EVENT_HANDLER handler);
