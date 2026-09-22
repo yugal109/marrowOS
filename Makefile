@@ -22,10 +22,13 @@ all: directories ./bin/boot.bin ./bin/kernel.bin user_programs
 	sudo cp ./data/images/editor.bmp /mnt/d
 	sudo cp ./data/images/calc.bmp /mnt/d
 	sudo cp ./data/images/music.bmp /mnt/d
+	sudo cp ./data/images/draw.bmp /mnt/d
 	sudo cp ./data/images/sysfont.bmp /mnt/d/sysfont.bmp
 	sudo cp ./programs/blank/blank.elf /mnt/d
 	sudo cp ./programs/shell/shell.elf /mnt/d
 	sudo cp ./programs/calculator/calc.elf /mnt/d
+	sudo cp ./programs/draw/draw.elf /mnt/d
+	sudo cp ./programs/editor/editor.elf /mnt/d
 
 
 directories:
@@ -228,6 +231,8 @@ user_programs:
 	$(MAKE) -C ./programs/blank all
 	$(MAKE) -C ./programs/shell all
 	$(MAKE) -C ./programs/calculator all
+	$(MAKE) -C ./programs/draw all
+	$(MAKE) -C ./programs/editor all
 
 user_programs_clean:
 	$(MAKE) -C ./programs/simple clean
@@ -237,6 +242,8 @@ user_programs_clean:
 	$(MAKE) -C ./programs/blank clean
 	$(MAKE) -C ./programs/shell clean
 	$(MAKE) -C ./programs/calculator clean
+	$(MAKE) -C ./programs/draw clean
+	$(MAKE) -C ./programs/editor clean
 
 clean: user_programs_clean
 	rm -rf ./bin/boot.bin ./bin/kernel.bin ./bin/os.bin

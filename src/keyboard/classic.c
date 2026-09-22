@@ -7,11 +7,16 @@
 #include "task/task.h"
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 #define CLASSIC_KEYBOARD_CAPSLOCK 0x3A
+#define CLASSIC_KEYBOARD_LEFT_SHIFT 0x2A
+#define CLASSIC_KEYBOARD_RIGHT_SHIFT 0x36
 
 int classic_keyboard_init();
 void classic_keyboard_handle_interrupt();
+
+static bool classic_keyboard_shift_held = false;
 
 // basically the index of this array is actually the scan code and the index value is the corresponding ascii
 static uint8_t keyboard_scan_set_one[] = {
@@ -23,6 +28,22 @@ static uint8_t keyboard_scan_set_one[] = {
     'H', 'J', 'K', 'L', ';', '\'', '`',
     0x00, '\\', 'Z', 'X', 'C', 'V', 'B',
     'N', 'M', ',', '.', '/', 0x00, '*',
+    0x00, 0x20, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, '7', '8', '9', '-', '4', '5',
+    '6', '+', '1', '2', '3', '0', '.'};
+
+// Same indices as above; 0x00 where a key has no shifted symbol. Letters
+// aren't here, their case is handled separately.
+static uint8_t keyboard_scan_set_one_shifted[] = {
+    0x00, 0x1B, '!', '@', '#', '$', '%',
+    '^', '&', '*', '(', ')', '_', '+',
+    0x08, '\t', 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, '{', '}',
+    0x0d, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, ':', '"', '~',
+    0x00, '|', 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, '<', '>', '?', 0x00, '*',
     0x00, 0x20, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, '7', '8', '9', '-', '4', '5',
@@ -55,13 +76,28 @@ uint8_t classic_keyboard_scancode_to_char(uint8_t scancode)
         return 0;
     }
     char c = keyboard_scan_set_one[scancode];
-    if (keyboard_get_capslock(&classic_keyboard) == KEYBOARD_CAPS_LOCK_OFF)
+
+    if (c >= 'A' && c <= 'Z')
     {
-        if (c >= 'A' && c <= 'Z')
+        // Shift and caps lock cancel out
+        bool caps_on = keyboard_get_capslock(&classic_keyboard) == KEYBOARD_CAPS_LOCK_ON;
+        bool want_upper = caps_on != classic_keyboard_shift_held;
+        if (!want_upper)
         {
             c += 32;
         }
+        return c;
     }
+
+    if (classic_keyboard_shift_held)
+    {
+        uint8_t shifted = keyboard_scan_set_one_shifted[scancode];
+        if (shifted != 0)
+        {
+            return shifted;
+        }
+    }
+
     return c;
 }
 
@@ -72,8 +108,16 @@ void classic_keyboard_handle_interrupt()
     scancode = insb(KEYBOARD_INPUT_PORT);
     insb(KEYBOARD_INPUT_PORT);
 
+    bool released = scancode & CLASSIC_KEYBOARD_KEY_RELEASED;
+    uint8_t make_code = scancode & ~CLASSIC_KEYBOARD_KEY_RELEASED;
+    if (make_code == CLASSIC_KEYBOARD_LEFT_SHIFT || make_code == CLASSIC_KEYBOARD_RIGHT_SHIFT)
+    {
+        classic_keyboard_shift_held = !released;
+        return;
+    }
+
     // check if the key is released
-    if (scancode & CLASSIC_KEYBOARD_KEY_RELEASED)
+    if (released)
     {
         return;
     }

@@ -21,6 +21,14 @@ size_t real_framebuffer_width = 0;
 size_t real_framebuffer_height = 0;
 size_t real_framebuffer_pixels_per_scanline = 0;
 
+// False until boot finishes, so setup draws never hit the real screen.
+static bool graphics_reveal_allowed = false;
+
+void graphics_reveal_enable()
+{
+    graphics_reveal_allowed = true;
+}
+
 void graphics_redraw_children(struct graphics_info *g);
 void graphics_info_children_free(struct graphics_info *graphics_info);
 struct graphics_info *graphics_get_at_screen_position(size_t x, size_t y, struct graphics_info *ignored, bool top_first);
@@ -104,6 +112,11 @@ void graphics_paste_pixels_to_framebuffer(
     uint32_t dst_abs_y  // absolute y on the screen to paste pixels
 )
 {
+    if (!graphics_reveal_allowed)
+    {
+        return;
+    }
+
     if (!src_info)
     {
         return;
@@ -262,9 +275,31 @@ void graphics_draw_image_scaled(struct graphics_info *graphics_info, struct imag
     }
 }
 
+// window_hide() only flags the root, so children must check their ancestors.
+bool graphics_hidden_in_tree(struct graphics_info *g)
+{
+    struct graphics_info *current = g;
+    while (current)
+    {
+        if (current->hidden)
+        {
+            return true;
+        }
+
+        current = current->parent;
+    }
+
+    return false;
+}
+
 void graphics_redraw_only(struct graphics_info *g)
 {
     if (!g)
+    {
+        return;
+    }
+
+    if (graphics_hidden_in_tree(g))
     {
         return;
     }
@@ -295,6 +330,11 @@ void graphics_redraw_children(struct graphics_info *g)
 void graphics_redraw_region(struct graphics_info *g, uint32_t local_x, uint32_t local_y, uint32_t width, uint32_t height)
 {
     if (!g)
+    {
+        return;
+    }
+
+    if (graphics_hidden_in_tree(g))
     {
         return;
     }
@@ -616,6 +656,11 @@ void graphics_redraw(struct graphics_info *g)
 {
     if (!g)
         return;
+
+    if (graphics_hidden_in_tree(g))
+    {
+        return;
+    }
 
     graphics_redraw_only(g);
 

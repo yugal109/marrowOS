@@ -365,7 +365,7 @@ int main(int argc, char **argv)
 
     while (gui_process(gui) >= 0)
     {
-        // future sleep here
+        usleep(10);
     }
 
     return 0;

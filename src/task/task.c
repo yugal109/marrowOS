@@ -78,6 +78,12 @@ static void task_list_remove(struct task *task)
         task->prev->next = task->next;
     }
 
+    // Or the next task keeps a prev pointer into this freed task
+    if (task->next)
+    {
+        task->next->prev = task->prev;
+    }
+
     if (task == task_head)
     {
         task_head = task->next;
@@ -88,10 +94,14 @@ static void task_list_remove(struct task *task)
         task_tail = task->prev;
     }
 
+    // Reads task->next, so keep it above the clearing below
     if (task == current_task)
     {
         current_task = task_get_next();
     }
+
+    task->next = NULL;
+    task->prev = NULL;
 }
 
 int task_free(struct task *task)

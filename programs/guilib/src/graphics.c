@@ -34,9 +34,10 @@ void graphics_draw_pixel(struct graphics *graphics_info, uint32_t x, uint32_t y,
 
 void graphics_draw_rect(struct graphics *graphics_info, uint32_t x, uint32_t y, uint32_t width, uint32_t height, struct framebuffer_pixel pixel_color)
 {
-    for (uint32_t lx = 0; lx < width; lx++)
+    // Row-major, so the inner loop walks contiguous pixels
+    for (uint32_t ly = 0; ly < height; ly++)
     {
-        for (uint32_t ly = 0; ly < height; ly++)
+        for (uint32_t lx = 0; lx < width; lx++)
         {
             uint32_t ax = x + lx;
             uint32_t ay = y + ly;

@@ -12,7 +12,9 @@ enum
     WINDOW_EVENT_TYPE_MOUSE_MOVE,
     WINDOW_EVENT_TYPE_MOUSE_CLICK,
     WINDOW_EVENT_TYPE_WINDOW_CLOSE,
-    WINDOW_EVENT_TYPE_KEY_PRESS
+    WINDOW_EVENT_TYPE_KEY_PRESS,
+    WINDOW_EVENT_TYPE_MOUSE_RELEASE,
+    WINDOW_EVENT_TYPE_RESIZE
 };
 
 struct window_event
@@ -46,6 +48,18 @@ struct window_event
         {
             int key;
         } keypress;
+
+        struct
+        {
+            int x;
+            int y;
+        } release;
+
+        struct
+        {
+            int width;
+            int height;
+        } resize;
 
     } data;
 };

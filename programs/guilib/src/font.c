@@ -233,7 +233,7 @@ int font_draw_text_wrap(struct graphics *graphics_info, struct font *font, int s
         {
             current_x = screen_x;
             current_y += font->bits_height_per_character;
-            // Continue so we don't print the carriage return
+            c++;
             continue;
         }
 

@@ -132,6 +132,78 @@ struct paging_desc *kernel_desc()
     return kernel_paging_desc;
 }
 
+// Rectangles, not text: no font system this early. Writes straight to
+// hardware like panic() does, bypassing the reveal gate.
+void kernel_boot_progress_draw(struct graphics_info *screen_info, int percent)
+{
+    if (!screen_info || !screen_info->framebuffer)
+    {
+        return;
+    }
+
+    if (percent < 0)
+    {
+        percent = 0;
+    }
+    if (percent > 100)
+    {
+        percent = 100;
+    }
+
+    int bar_width = 320;
+    int bar_height = 18;
+    int bar_x = ((int)screen_info->horizontal_resolution - bar_width) / 2;
+    int bar_y = ((int)screen_info->vertical_resolution - bar_height) / 2;
+    int border_thickness = 2;
+
+    struct framebuffer_pixel border = {.red = 0x60, .green = 0x60, .blue = 0x70, .reserved = 0};
+    struct framebuffer_pixel empty = {.red = 0x1a, .green = 0x1a, .blue = 0x22, .reserved = 0};
+    struct framebuffer_pixel fill = {.red = 0x5b, .green = 0xd6, .blue = 0x7a, .reserved = 0};
+
+    int fill_width = (bar_width - border_thickness * 2) * percent / 100;
+
+    for (int y = 0; y < bar_height; y++)
+    {
+        for (int x = 0; x < bar_width; x++)
+        {
+            bool on_border = x < border_thickness || x >= bar_width - border_thickness ||
+                              y < border_thickness || y >= bar_height - border_thickness;
+
+            struct framebuffer_pixel color = empty;
+            if (on_border)
+            {
+                color = border;
+            }
+            else if (x - border_thickness < fill_width)
+            {
+                color = fill;
+            }
+
+            int abs_x = bar_x + x;
+            int abs_y = bar_y + y;
+            screen_info->framebuffer[abs_y * screen_info->pixels_per_scanline + abs_x] = color;
+        }
+    }
+}
+
+// Loading here instead of on first click keeps the disk read out of the
+// mouse interrupt. dock_slot indexes windows.c's dock_program_paths.
+void kernel_preload_dock_app(const char *path, int dock_slot)
+{
+    struct process *process = NULL;
+    int res = process_load_switch(path, &process);
+    if (res != MARROWOS_ALL_OK)
+    {
+        print("Failed to preload: ");
+        print(path);
+        print("\n");
+        return;
+    }
+
+    process->dock_slot = dock_slot;
+    process->start_hidden = true;
+}
+
 // defined in kernel.asm
 extern struct graphics_info default_graphics_info;
 void kernel_main()
@@ -184,11 +256,27 @@ void kernel_main()
 
     screen_info = graphics_screen_info();
 
+    // Straight to hardware, since the reveal gate blocks everything else
+    // until boot finishes.
+    if (screen_info && screen_info->framebuffer)
+    {
+        struct framebuffer_pixel loading_bg = {.red = 0x1a, .green = 0x1a, .blue = 0x22, .reserved = 0};
+        for (uint32_t y = 0; y < screen_info->vertical_resolution; y++)
+        {
+            for (uint32_t x = 0; x < screen_info->horizontal_resolution; x++)
+            {
+                screen_info->framebuffer[y * screen_info->pixels_per_scanline + x] = loading_bg;
+            }
+        }
+    }
+    kernel_boot_progress_draw(screen_info, 0);
+
     // Enable interrupt descriptor table
     idt_init();
 
     // enable pci and scan for devices
     pci_init();
+    kernel_boot_progress_draw(screen_info, 15);
 
     // Enable fs functionality
     fs_init();
@@ -198,12 +286,14 @@ void kernel_main()
 
     // Initialize GPT(gloabl partition table) drives
     gpt_init();
+    kernel_boot_progress_draw(screen_info, 35);
 
     // Initialize the font system
     font_system_init();
 
     // Setup the terminal system
     terminal_system_setup();
+    kernel_boot_progress_draw(screen_info, 50);
 
     // initialize mouse system
     mouse_system_init();
@@ -216,6 +306,7 @@ void kernel_main()
 
     // initialize stage two graphics setup
     graphics_setup_stage_two(&default_graphics_info);
+    kernel_boot_progress_draw(screen_info, 65);
 
     struct font *font = font_get_system_font();
     if (!font)
@@ -243,12 +334,11 @@ void kernel_main()
     graphics_redraw_all();
     terminal_background_save(system_terminal);
 
-    // Dock draws right after the wallpaper, not before it, so the two
-    // appear together instead of the dock sitting alone on a blank screen.
-    // Must come before window_system_initialize_stage2: that registers a
-    // keyboard listener, which silently no-ops if no keyboard exists yet.
+    // After the wallpaper so both appear together. keyboard_init first:
+    // stage2 registers a keyboard listener and no-ops without one.
     keyboard_init();
     window_system_initialize_stage2();
+    kernel_boot_progress_draw(screen_info, 85);
 
     // Allocate a 1 MB stack for the kernel IDT
     size_t stack_size = 1024 * 1024;
@@ -294,6 +384,16 @@ void kernel_main()
     {
         panic("Failed to load user program\n");
     }
+    kernel_boot_progress_draw(screen_info, 90);
+
+    kernel_preload_dock_app("@:/editor.elf", 2);
+    kernel_preload_dock_app("@:/calc.elf", 3);
+    kernel_preload_dock_app("@:/draw.elf", 5);
+    kernel_boot_progress_draw(screen_info, 100);
+
+    // Show the desktop only now, as it becomes interactive
+    graphics_reveal_enable();
+    graphics_redraw_all();
 
     // unmask timer IRQ0, or tasks never switch
     IRQ_enable(IRQ_TIMER);

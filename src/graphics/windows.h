@@ -14,7 +14,9 @@ enum
     WINDOW_EVENT_TYPE_MOUSE_MOVE,
     WINDOW_EVENT_TYPE_MOUSE_CLICK,
     WINDOW_EVENT_TYPE_WINDOW_CLOSE,
-    WINDOW_EVENT_TYPE_KEY_PRESS
+    WINDOW_EVENT_TYPE_KEY_PRESS,
+    WINDOW_EVENT_TYPE_MOUSE_RELEASE,
+    WINDOW_EVENT_TYPE_RESIZE
 };
 
 struct window_event
@@ -42,6 +44,16 @@ struct window_event
         {
             int key;
         } keypress;
+        struct
+        {
+            int x;
+            int y;
+        } release;
+        struct
+        {
+            int width;
+            int height;
+        } resize;
     } data;
 };
 
@@ -72,6 +84,18 @@ struct window_event_userland
             int y;
         } click;
 
+        struct
+        {
+            int x;
+            int y;
+        } release;
+
+        struct
+        {
+            int width;
+            int height;
+        } resize;
+
     } data;
 };
 
@@ -81,7 +105,9 @@ enum
 {
     WINDOW_FLAG_BORDERLESS = 0b00000001,
     WINDOW_FLAG_CLICK_THROUGH = 0b00000010,
-    WINDOW_FLAG_BACKGROUND_TRANSPARENT = 0b00000100
+    WINDOW_FLAG_BACKGROUND_TRANSPARENT = 0b00000100,
+    // Hidden from creation, rather than hidden after it already drew once
+    WINDOW_FLAG_START_HIDDEN = 0b00001000
 };
 
 struct window

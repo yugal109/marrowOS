@@ -130,6 +130,7 @@ void graphics_draw_pixel(struct graphics_info *graphics_info, uint32_t x, uint32
 struct graphics_info *graphics_screen_info();
 void graphics_setup(struct graphics_info *main_graphics_info);
 void graphics_redraw_all();
+void graphics_reveal_enable();
 void graphics_draw_image(struct graphics_info *graphics_info, struct image *image, int x, int y);
 void graphics_draw_image_scaled(struct graphics_info *graphics_info, struct image *image,
                                 int x, int y, uint32_t dest_w, uint32_t dest_h);

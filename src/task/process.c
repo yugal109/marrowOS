@@ -232,7 +232,9 @@ int process_pop_window_event(struct process *process, struct window_event *event
 
     if (process->window_events.total_unpopped > 0)
     {
-        vector_at(process->window_events.vector, 0, event_out, sizeof(struct window_event));
+        // index is the write cursor; the oldest unread sits behind it
+        size_t read_index = (process->window_events.index - process->window_events.total_unpopped) % PROCESS_MAX_WINDOW_EVENTS_RECORDED;
+        vector_at(process->window_events.vector, read_index, event_out, sizeof(struct window_event));
         process->window_events.total_unpopped--;
         res = 0;
     }
@@ -293,11 +295,16 @@ void process_close_windows(struct process *process)
 
 int process_push_window_event(struct process *process, struct window_event *event)
 {
-    int element_index = process->window_events.index % PROCESS_MAX_WINDOW_EVENTS_RECORDED;
+    size_t element_index = process->window_events.index % PROCESS_MAX_WINDOW_EVENTS_RECORDED;
     struct window_event event_copy = *event;
     event_copy.window = NULL;
     vector_overwrite(process->window_events.vector, element_index, &event_copy, sizeof(event_copy));
-    process->window_events.total_unpopped++;
+    process->window_events.index++;
+
+    if (process->window_events.total_unpopped < PROCESS_MAX_WINDOW_EVENTS_RECORDED)
+    {
+        process->window_events.total_unpopped++;
+    }
 
     return 0;
 }
@@ -315,7 +322,14 @@ struct process_window *process_window_create(struct process *process, char *titl
     struct graphics_info *screen_graphics = graphics_screen_info();
     size_t abs_x = (screen_graphics->width / 2) - (width / 2);
     size_t abs_y = (screen_graphics->height / 2) - (height / 2);
-    proc_win->kernel_win = window_create(screen_graphics, NULL, title, abs_x, abs_y, width, height, flags, id);
+
+    int create_flags = flags;
+    if (process->start_hidden)
+    {
+        create_flags |= WINDOW_FLAG_START_HIDDEN;
+    }
+
+    proc_win->kernel_win = window_create(screen_graphics, NULL, title, abs_x, abs_y, width, height, create_flags, id);
     if (!proc_win->kernel_win)
     {
         res = -ENOMEM;

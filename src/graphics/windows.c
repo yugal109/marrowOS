@@ -59,10 +59,8 @@ out:
     return res;
 }
 
-// PS/2 can deliver movement packets far faster than the screen needs
-// repainting; without this a drag runs a full redraw on every single
-// packet. Coalescing to this interval keeps drags smooth instead of
-// flooding the framebuffer with redundant repaints.
+// PS/2 sends packets far faster than the screen needs repainting, so
+// coalesce drag redraws to this interval.
 #define WINDOW_DRAG_REDRAW_INTERVAL_MS 8
 static TIME_MILISECONDS window_drag_last_redraw_ms = 0;
 
@@ -134,23 +132,54 @@ struct window *window_get_at_position(size_t abs_x, size_t abs_y, struct window 
 
     return NULL;
 }
+// The window a press started in keeps its clicks and release even if the
+// cursor drags outside it, so apps always see the button come back up.
+static struct window *mouse_capture_window = NULL;
+
 void window_click_handler(struct mouse *mouse, int abs_x, int abs_y, MOUSE_CLICK_TYPE type)
 {
-    struct window *win = window_get_at_position(abs_x, abs_y, mouse->graphic.window);
+    struct window *win = mouse_capture_window;
+    if (!win)
+    {
+        win = window_get_at_position(abs_x, abs_y, mouse->graphic.window);
+        if (win)
+        {
+            mouse_capture_window = win;
+            window_focus(win);
+        }
+    }
+
     if (win)
     {
         int rel_x = abs_x - win->root_graphics->starting_x;
         int rel_y = abs_y - win->root_graphics->starting_y;
         window_click(win, rel_x, rel_y, type);
-        window_focus(win);
     }
+}
+
+void window_release(struct window *window, int rel_x, int rel_y)
+{
+    struct window_event event = {0};
+    event.type = WINDOW_EVENT_TYPE_MOUSE_RELEASE;
+    event.data.release.x = rel_x;
+    event.data.release.y = rel_y;
+    window_event_push(window, &event);
 }
 
 void window_release_handler(struct mouse *mouse, int abs_x, int abs_y, MOUSE_CLICK_TYPE type)
 {
-    // Whatever button was held has now come back up: whatever window was
-    // being dragged (if any) gets dropped right here, wherever that is.
+    // Button is up, so drop whatever was being dragged
     window_moving = NULL;
+
+    struct window *win = mouse_capture_window;
+    if (win)
+    {
+        int rel_x = abs_x - win->root_graphics->starting_x;
+        int rel_y = abs_y - win->root_graphics->starting_y;
+        window_release(win, rel_x, rel_y);
+    }
+
+    mouse_capture_window = NULL;
 }
 
 // Forward decl: defined with the dock below, but hide/show need to refresh it.
@@ -188,15 +217,15 @@ void window_show(struct window *window)
     window_dock_icon_redraw();
 }
 
-// --- Dock: bottom bar, always on top. Only the Terminal icon is clickable
-// (shows/hides its window); the rest are decorative for now. ---
+// Dock: bottom bar, always on top. Icons with a program path launch it,
+// then toggle that window; the rest are decorative for now.
 
 #define WINDOW_DOCK_HEIGHT 60
 #define WINDOW_DOCK_ICON_MARGIN 16
 #define WINDOW_DOCK_ICON_GAP 12
 #define WINDOW_DOCK_DOT_SIZE 6
 #define WINDOW_DOCK_ZINDEX 200000
-#define WINDOW_DOCK_TOTAL_ICONS 5
+#define WINDOW_DOCK_TOTAL_ICONS 6
 
 // PS/2 fires click on every packet while held, so latch to act once.
 static bool dock_click_active = false;
@@ -211,14 +240,16 @@ static const char *dock_icon_paths[WINDOW_DOCK_TOTAL_ICONS] = {
     "@:/editor.bmp",
     "@:/calc.bmp",
     "@:/music.bmp",
+    "@:/draw.bmp",
 };
 // ELF each icon launches on first click; NULL means the icon does nothing yet.
 static const char *dock_program_paths[WINDOW_DOCK_TOTAL_ICONS] = {
     NULL,
     NULL,
-    NULL,
+    "@:/editor.elf",
     "@:/calc.elf",
     NULL,
+    "@:/draw.elf",
 };
 
 size_t window_dock_icon_x(int index)
@@ -594,6 +625,11 @@ void window_drop_event_handlers(struct window *window)
 
 void window_free(struct window *window)
 {
+    if (mouse_capture_window == window)
+    {
+        mouse_capture_window = NULL;
+    }
+
     // Don't leave the dock pointing at freed memory.
     bool dock_changed = false;
     for (int i = 0; i < WINDOW_DOCK_TOTAL_ICONS; i++)
@@ -737,13 +773,9 @@ int window_position_set(struct window *window, size_t new_x, size_t new_y)
         y_redraw_height = -y_gap;
     }
 
-    // The strip-only erase below assumes the window's own redraw at the new
-    // position will fully overwrite whatever was left behind in the overlap
-    // between old and new position. That's false for a window with a
-    // transparency key: its "see-through" pixels don't overwrite anything,
-    // so stale pixels in that overlap never get cleared and smear into a
-    // trail as the window moves. Such windows always need the full old
-    // rectangle erased, not just the exposed strips.
+    // The strip-only erase relies on the window's redraw overwriting the
+    // old/new overlap. Transparent pixels don't overwrite, so those windows
+    // need the whole old rect cleared or they smear a trail.
     struct framebuffer_pixel no_transparency_color = {0};
     bool has_transparency_key = memcmp(&window->graphics->transparency_key, &no_transparency_color, sizeof(no_transparency_color)) != 0;
 
@@ -891,6 +923,11 @@ void window_resize(struct window *window, size_t new_x, size_t new_y, size_t new
         body_x_offset = WINDOW_BORDER_PIXEL_SIZE;
     }
 
+    // graphics_info_recalculate() only derives starting_x/y from a parent,
+    // and root has none — so set it here or hit-testing uses the old spot.
+    window->root_graphics->starting_x = new_x;
+    window->root_graphics->starting_y = new_y;
+
     graphics_info_resize(window->root_graphics, new_x, new_y, total_width_bounds, total_height_bounds);
     window->x = new_x;
     window->y = new_y;
@@ -962,6 +999,13 @@ void window_resize(struct window *window, size_t new_x, size_t new_y, size_t new
 
     graphics_redraw_region(graphics_screen_info(), old_screen_x, old_screen_y, old_total_width, old_total_height);
     window_redraw(window);
+
+    // The body buffer moved above, so userland's mapping is now stale
+    struct window_event event = {0};
+    event.type = WINDOW_EVENT_TYPE_RESIZE;
+    event.data.resize.width = new_width;
+    event.data.resize.height = new_height;
+    window_event_push(window, &event);
 }
 
 void window_maximize_toggle(struct window *window)
@@ -1097,6 +1141,12 @@ struct window *window_create(struct graphics_info *graphics_info, struct font *f
     {
         res = -ENOMEM;
         goto out;
+    }
+
+    // Before any drawing below, so construction never reaches the screen.
+    if (flags & WINDOW_FLAG_START_HIDDEN)
+    {
+        root_graphics_info->hidden = true;
     }
 
     if (flags & WINDOW_FLAG_BACKGROUND_TRANSPARENT)
