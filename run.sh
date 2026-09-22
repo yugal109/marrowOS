@@ -14,4 +14,6 @@ qemu-system-x86_64 \
   -drive file=./bin/os.img,if=none,id=nvme0,format=raw \
   -device nvme,drive=nvme0,serial=nvme0,bus=rp2,addr=0x0 \
   \
-  -device qemu-xhci,id=xhci,bus=rp3,addr=0x0
+  -device qemu-xhci,id=xhci,bus=rp3,addr=0x0 \
+  -device usb-kbd,bus=xhci.0 \
+  -device usb-mouse,bus=xhci.0
