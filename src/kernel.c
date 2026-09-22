@@ -8,6 +8,7 @@
 #include "memory/paging/paging.h"
 #include "io/tsc.h"
 #include "io/pci.h"
+#include "usb/xhci.h"
 #include "graphics/graphics.h"
 #include "graphics/font.h"
 #include "fs/pparser.h"
@@ -390,6 +391,11 @@ void kernel_main()
     kernel_preload_dock_app("@:/calc.elf", 3);
     kernel_preload_dock_app("@:/draw.elf", 5);
     kernel_boot_progress_draw(screen_info, 100);
+
+    // Phase 0 recon: prints straight into the terminal, so it needs to run
+    // after the terminal exists and before the reveal, or the reveal gate
+    // hides it and the wallpaper draws over it.
+    xhci_init();
 
     // Show the desktop only now, as it becomes interactive
     graphics_reveal_enable();
