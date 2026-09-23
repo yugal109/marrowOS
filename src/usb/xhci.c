@@ -5,6 +5,8 @@
 #include "memory/memory.h"
 #include "kernel.h"
 #include "string/string.h"
+#include "keyboard/usbhid.h"
+#include "mouse/usbhid_mouse.h"
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -78,6 +80,7 @@
 
 #define USB_REQ_GET_DESCRIPTOR 6
 #define USB_REQ_SET_CONFIGURATION 9
+#define USB_REQ_SET_PROTOCOL 0x0B
 #define USB_DESC_DEVICE 1
 #define USB_DESC_CONFIGURATION 2
 #define USB_DESC_TYPE_INTERFACE 4
@@ -86,6 +89,19 @@
 #define XHCI_EVT_RING_TRBS 32
 #define XHCI_EP0_RING_TRBS 16
 #define XHCI_MAX_TRACKED_SLOTS 16
+#define XHCI_HID_RING_TRBS 8
+
+#define XHCI_TRB_TYPE_NORMAL 1
+#define XHCI_TRB_TYPE_CONFIGURE_ENDPOINT_CMD 12
+
+#define USB_DESC_TYPE_ENDPOINT 5
+#define USB_EP_ATTR_TYPE_MASK 0x3
+#define USB_EP_ATTR_TYPE_INTERRUPT 3
+#define USB_EP_ADDR_DIR_IN 0x80
+
+#define HID_SUBCLASS_BOOT 1
+#define HID_PROTOCOL_KEYBOARD 1
+#define HID_PROTOCOL_MOUSE 2
 
 struct xhci_trb
 {
@@ -167,10 +183,21 @@ struct xhci_slot_state
 
     uint8_t *input_ctx;
     uint8_t *output_ctx;
+
+    // Interrupt IN endpoint used for HID reports (0 if this slot has none).
+    bool has_hid_ep;
+    uint8_t hid_ep_dci;
+    uint8_t hid_ep_max_packet;
+    struct xhci_trb *hid_ep_ring;
+    uint32_t hid_ep_enqueue;
+    uint8_t hid_ep_cycle;
+    uint8_t *hid_report_buf[XHCI_HID_RING_TRBS];
 };
 
 static struct xhci_hc g_xhci;
 static struct xhci_slot_state g_xhci_slots[XHCI_MAX_TRACKED_SLOTS];
+static int g_xhci_keyboard_slot = -1;
+static int g_xhci_mouse_slot = -1;
 static uint8_t g_xhci_context_size = 32;
 
 static void ctx_set_dword(uint8_t *ctx_base, size_t dword_index, uint32_t value)
@@ -416,16 +443,30 @@ static void xhci_report_ports()
     }
 }
 
+// Advances *enqueue past the TRB just written. On wrap, the ring's Link TRB
+// cycle bit must be flipped to match the new cycle too: the controller only
+// auto-toggles its own internal cycle state the moment it passes a Link TRB
+// whose stored bit already matches. Every lap after the first needs that
+// stored bit corrected in lockstep, or the controller finds a stale Link TRB
+// and silently stops advancing the ring for good.
+static void xhci_ring_advance(struct xhci_trb *ring, uint32_t trb_count, uint32_t *enqueue, uint8_t *cycle)
+{
+    (*enqueue)++;
+    if (*enqueue == trb_count - 1)
+    {
+        *enqueue = 0;
+        *cycle ^= 1;
+
+        struct xhci_trb *link = &ring[trb_count - 1];
+        link->control = (link->control & ~XHCI_TRB_CYCLE) | (*cycle ? XHCI_TRB_CYCLE : 0);
+    }
+}
+
 // Advances the command ring's software enqueue index/cycle, following the
 // link TRB at the end exactly like the controller will when consuming it.
 static void xhci_cmd_ring_advance()
 {
-    g_xhci.cmd_enqueue++;
-    if (g_xhci.cmd_enqueue == (uint32_t)(XHCI_CMD_RING_TRBS - 1))
-    {
-        g_xhci.cmd_enqueue = 0;
-        g_xhci.cmd_cycle ^= 1;
-    }
+    xhci_ring_advance(g_xhci.cmd_ring, XHCI_CMD_RING_TRBS, &g_xhci.cmd_enqueue, &g_xhci.cmd_cycle);
 }
 
 // No-Op command round trip: proves the command ring, event ring, ERST and
@@ -732,12 +773,7 @@ static bool xhci_control_transfer(struct xhci_slot_state *slot, int slot_id, uin
     uint32_t trt = w_length == 0 ? 0 : (data_in ? 3u : 2u);
     setup->control = XHCI_TRB_TYPE(XHCI_TRB_TYPE_SETUP_STAGE) | XHCI_TRB_CTRL_IDT | (trt << 16) | (slot->ep0_cycle ? XHCI_TRB_CYCLE : 0);
 
-    slot->ep0_enqueue++;
-    if (slot->ep0_enqueue == (uint32_t)(XHCI_EP0_RING_TRBS - 1))
-    {
-        slot->ep0_enqueue = 0;
-        slot->ep0_cycle ^= 1;
-    }
+    xhci_ring_advance(ring, XHCI_EP0_RING_TRBS, &slot->ep0_enqueue, &slot->ep0_cycle);
 
     if (w_length > 0)
     {
@@ -746,12 +782,7 @@ static bool xhci_control_transfer(struct xhci_slot_state *slot, int slot_id, uin
         data->status = w_length;
         data->control = XHCI_TRB_TYPE(XHCI_TRB_TYPE_DATA_STAGE) | (data_in ? XHCI_TRB_CTRL_DIR_IN : 0) | (slot->ep0_cycle ? XHCI_TRB_CYCLE : 0);
 
-        slot->ep0_enqueue++;
-        if (slot->ep0_enqueue == (uint32_t)(XHCI_EP0_RING_TRBS - 1))
-        {
-            slot->ep0_enqueue = 0;
-            slot->ep0_cycle ^= 1;
-        }
+        xhci_ring_advance(ring, XHCI_EP0_RING_TRBS, &slot->ep0_enqueue, &slot->ep0_cycle);
     }
 
     // Status stage direction is the opposite of the data stage (IN if there
@@ -762,12 +793,7 @@ static bool xhci_control_transfer(struct xhci_slot_state *slot, int slot_id, uin
     status->status = 0;
     status->control = XHCI_TRB_TYPE(XHCI_TRB_TYPE_STATUS_STAGE) | XHCI_TRB_CTRL_IOC | (status_dir_in ? XHCI_TRB_CTRL_DIR_IN : 0) | (slot->ep0_cycle ? XHCI_TRB_CYCLE : 0);
 
-    slot->ep0_enqueue++;
-    if (slot->ep0_enqueue == (uint32_t)(XHCI_EP0_RING_TRBS - 1))
-    {
-        slot->ep0_enqueue = 0;
-        slot->ep0_cycle ^= 1;
-    }
+    xhci_ring_advance(ring, XHCI_EP0_RING_TRBS, &slot->ep0_enqueue, &slot->ep0_cycle);
 
     // Doorbell target 1 is always the default control endpoint (EP0).
     g_xhci.db[slot_id] = 1;
@@ -795,8 +821,33 @@ static bool xhci_set_configuration(struct xhci_slot_state *slot, int slot_id, ui
     return xhci_control_transfer(slot, slot_id, 0x00, USB_REQ_SET_CONFIGURATION, config_value, 0, 0, NULL, false);
 }
 
-static void xhci_print_config_interfaces(uint8_t *cfg, uint16_t total_len)
+// Class-specific HID request (bmRequestType 0x21, bRequest 0x0B). Without
+// this, a device that implements both Report and Boot protocol is free to
+// power up in Report protocol — a completely different, device-specific
+// byte layout the boot-report parsers here don't understand. QEMU's
+// synthetic usb-kbd/usb-mouse only ever speak boot format so this never
+// mattered for them, but a real device isn't guaranteed to.
+static bool xhci_set_boot_protocol(struct xhci_slot_state *slot, int slot_id, uint8_t interface_number)
 {
+    return xhci_control_transfer(slot, slot_id, 0x21, USB_REQ_SET_PROTOCOL, 0, interface_number, 0, NULL, false);
+}
+
+struct xhci_hid_ep_info
+{
+    bool found;
+    uint8_t ep_addr;
+    uint16_t max_packet;
+    uint8_t interval;
+    uint8_t interface_number;
+};
+
+// Walks the interface/endpoint chain (self-describing via bLength), prints
+// every interface it sees, and captures the first Interrupt IN endpoint
+// belonging to a HID boot-protocol keyboard and/or mouse interface, if any.
+static void xhci_walk_config(uint8_t *cfg, uint16_t total_len, struct xhci_hid_ep_info *kbd_ep_out, struct xhci_hid_ep_info *mouse_ep_out)
+{
+    uint8_t boot_protocol = 0; // 0 = none, matches neither HID_PROTOCOL_* value
+    uint8_t current_interface_number = 0;
     size_t off = 0;
     while (off + 2 <= total_len)
     {
@@ -809,18 +860,283 @@ static void xhci_print_config_interfaces(uint8_t *cfg, uint16_t total_len)
 
         if (b_type == USB_DESC_TYPE_INTERFACE && off + 9 <= total_len)
         {
+            uint8_t if_class = cfg[off + 5];
+            uint8_t if_subclass = cfg[off + 6];
+            uint8_t if_protocol = cfg[off + 7];
+
             print("xHCI:   interface ");
             print(itoa(cfg[off + 2]));
             print(" class=");
-            print(itoa(cfg[off + 5]));
+            print(itoa(if_class));
             print(" subclass=");
-            print(itoa(cfg[off + 6]));
+            print(itoa(if_subclass));
             print(" protocol=");
-            print(itoa(cfg[off + 7]));
+            print(itoa(if_protocol));
             print("\n");
+
+            boot_protocol = (if_class == 3 && if_subclass == HID_SUBCLASS_BOOT) ? if_protocol : 0;
+            current_interface_number = cfg[off + 2];
+        }
+        else if (b_type == USB_DESC_TYPE_ENDPOINT && off + 7 <= total_len)
+        {
+            struct xhci_hid_ep_info *target = NULL;
+            if (boot_protocol == HID_PROTOCOL_KEYBOARD && kbd_ep_out && !kbd_ep_out->found)
+            {
+                target = kbd_ep_out;
+            }
+            else if (boot_protocol == HID_PROTOCOL_MOUSE && mouse_ep_out && !mouse_ep_out->found)
+            {
+                target = mouse_ep_out;
+            }
+
+            if (target)
+            {
+                uint8_t ep_addr = cfg[off + 2];
+                uint8_t attrs = cfg[off + 3];
+                if ((ep_addr & USB_EP_ADDR_DIR_IN) && (attrs & USB_EP_ATTR_TYPE_MASK) == USB_EP_ATTR_TYPE_INTERRUPT)
+                {
+                    target->found = true;
+                    target->ep_addr = ep_addr;
+                    target->max_packet = cfg[off + 4] | ((uint16_t)cfg[off + 5] << 8);
+                    target->interval = cfg[off + 6];
+                    target->interface_number = current_interface_number;
+                }
+            }
         }
 
         off += b_length;
+    }
+}
+
+// Low/full speed interrupt endpoints give bInterval in 1ms frames; xHCI
+// wants floor(log2(interval in 125us units)) instead. High/Super speed
+// endpoints already give it as a direct power-of-two exponent.
+static uint32_t xhci_encode_interval(uint8_t speed, uint8_t b_interval)
+{
+    if (speed == 3 || speed == 4)
+    {
+        uint32_t exp = b_interval > 0 ? (uint32_t)b_interval - 1 : 0;
+        return exp > 15 ? 15 : exp;
+    }
+
+    uint32_t units = (uint32_t)b_interval * 8;
+    if (units < 1)
+    {
+        units = 1;
+    }
+    uint32_t exp = 0;
+    while (exp < 15 && (1u << (exp + 1)) <= units)
+    {
+        exp++;
+    }
+    return exp;
+}
+
+static void xhci_ring_init_generic(struct xhci_trb **ring_out, uint32_t trb_count)
+{
+    struct xhci_trb *ring = kzalloc(trb_count * sizeof(struct xhci_trb));
+    struct xhci_trb *link = &ring[trb_count - 1];
+    link->parameter = (uint64_t)(uintptr_t)ring;
+    link->status = 0;
+    link->control = XHCI_TRB_TYPE(XHCI_TRB_TYPE_LINK) | XHCI_TRB_TOGGLE_CYCLE | XHCI_TRB_CYCLE;
+    *ring_out = ring;
+}
+
+// Adds the interrupt IN endpoint to the device via Configure Endpoint,
+// allocates its transfer ring, and pre-queues buffers so it starts
+// receiving reports immediately.
+static bool xhci_setup_hid_interrupt_endpoint(struct xhci_slot_state *slot, int slot_id, uint8_t speed, struct xhci_hid_ep_info *ep)
+{
+    uint8_t ep_num = ep->ep_addr & 0x0F;
+    uint8_t dci = (uint8_t)(ep_num * 2 + 1); // always IN for HID reports
+
+    size_t cs = slot->context_size;
+    size_t total_contexts = 1 + dci + 1; // input control + up to and including this DCI
+    uint8_t *cfg_input = kzalloc(total_contexts * cs);
+
+    uint8_t *input_ctrl = cfg_input;
+    uint8_t *slot_ctx = cfg_input + cs;
+    uint8_t *ep_ctx = cfg_input + (1 + dci) * cs;
+
+    // A0 (slot) + A(dci) for the new endpoint.
+    ctx_set_dword(input_ctrl, 1, (1u << 0) | (1u << dci));
+
+    // Slot Context must be refreshed with Context Entries covering this DCI.
+    ctx_set_dword(slot_ctx, 0, ((uint32_t)speed << 20) | ((uint32_t)dci << 27));
+    ctx_set_dword(slot_ctx, 1, (uint32_t)(slot->port + 1) << 16);
+
+    xhci_ring_init_generic(&slot->hid_ep_ring, XHCI_HID_RING_TRBS);
+    slot->hid_ep_enqueue = 0;
+    slot->hid_ep_cycle = 1;
+    slot->hid_ep_dci = dci;
+    slot->hid_ep_max_packet = (uint8_t)ep->max_packet;
+
+    uint32_t interval = xhci_encode_interval(speed, ep->interval);
+
+    // EP Type=7 (Interrupt In), CErr=3.
+    ctx_set_dword(ep_ctx, 0, interval << 16);
+    ctx_set_dword(ep_ctx, 1, (3u << 1) | (7u << 3) | ((uint32_t)ep->max_packet << 16));
+    uint64_t tr_dq = (uint64_t)(uintptr_t)slot->hid_ep_ring | 1;
+    ctx_set_dword(ep_ctx, 2, (uint32_t)(tr_dq & 0xFFFFFFFFu));
+    ctx_set_dword(ep_ctx, 3, (uint32_t)(tr_dq >> 32));
+    ctx_set_dword(ep_ctx, 4, ep->max_packet);
+
+    uint32_t control = XHCI_TRB_TYPE(XHCI_TRB_TYPE_CONFIGURE_ENDPOINT_CMD) | ((uint32_t)slot_id << 24);
+    xhci_enqueue_command((uint64_t)(uintptr_t)cfg_input, 0, control);
+
+    uint32_t code = 0;
+    uint32_t got_slot = 0;
+    if (!xhci_poll_event(XHCI_TRB_TYPE_CMD_COMPLETION, &code, &got_slot) || code != 1)
+    {
+        print("xHCI: Configure Endpoint failed, code=");
+        print(itoa(code));
+        print("\n");
+        return false;
+    }
+
+    // Pre-queue every usable ring slot (leaving the link TRB alone) so the
+    // controller has buffers ready before we ever poll for the first report.
+    for (uint32_t i = 0; i < XHCI_HID_RING_TRBS - 1; i++)
+    {
+        uint8_t *buf = kzalloc(ep->max_packet > 8 ? ep->max_packet : 8);
+        slot->hid_report_buf[slot->hid_ep_enqueue] = buf;
+
+        struct xhci_trb *trb = &slot->hid_ep_ring[slot->hid_ep_enqueue];
+        trb->parameter = (uint64_t)(uintptr_t)buf;
+        trb->status = ep->max_packet;
+        trb->control = XHCI_TRB_TYPE(XHCI_TRB_TYPE_NORMAL) | XHCI_TRB_CTRL_IOC | (slot->hid_ep_cycle ? XHCI_TRB_CYCLE : 0);
+
+        slot->hid_ep_enqueue++;
+        if (slot->hid_ep_enqueue == (uint32_t)(XHCI_HID_RING_TRBS - 1))
+        {
+            slot->hid_ep_enqueue = 0;
+            slot->hid_ep_cycle ^= 1;
+        }
+    }
+
+    slot->has_hid_ep = true;
+    g_xhci.db[slot_id] = dci;
+
+    print("xHCI: HID interrupt endpoint ready, addr=");
+    print(xhci_hex32(ep->ep_addr));
+    print(" maxPacket=");
+    print(itoa(ep->max_packet));
+    print("\n");
+
+    return true;
+}
+
+typedef void (*xhci_hid_report_handler)(const uint8_t *buf, uint32_t len);
+
+// Parses (if the completion carries data) and re-arms one completed HID
+// interrupt IN transfer, shared by both the keyboard and mouse endpoints.
+static void xhci_service_hid_completion(struct xhci_slot_state *slot, int slot_id, uint64_t completed_trb_addr, uint32_t remaining, uint32_t completion_code, xhci_hid_report_handler handler)
+{
+    uintptr_t ring_base = (uintptr_t)slot->hid_ep_ring;
+    uintptr_t trb_off = (uintptr_t)completed_trb_addr - ring_base;
+    uint32_t index = (uint32_t)(trb_off / sizeof(struct xhci_trb));
+    if (index >= (uint32_t)(XHCI_HID_RING_TRBS - 1))
+    {
+        return;
+    }
+
+    uint8_t *buf = slot->hid_report_buf[index];
+
+    // Success or Short Packet both carry real report bytes. Anything else
+    // (stall, transaction error, ...) carries no usable data — skip parsing
+    // it, but still re-arm the slot below so the endpoint doesn't quietly
+    // starve after the first non-1/13 completion.
+    if (completion_code == 1 || completion_code == 13)
+    {
+        uint32_t len = slot->hid_ep_max_packet - remaining;
+        handler(buf, len);
+    }
+    else
+    {
+        print("xHCI: HID report completion code=");
+        print(itoa(completion_code));
+        print(" (re-arming anyway)\n");
+    }
+
+    // Re-arm this same ring slot. Production only ever happens one-for-one
+    // right after a consumption, so hid_ep_cycle is guaranteed to already
+    // hold the correct cycle bit for this exact index.
+    struct xhci_trb *trb = &slot->hid_ep_ring[index];
+    trb->parameter = (uint64_t)(uintptr_t)buf;
+    trb->status = slot->hid_ep_max_packet;
+    trb->control = XHCI_TRB_TYPE(XHCI_TRB_TYPE_NORMAL) | XHCI_TRB_CTRL_IOC | (slot->hid_ep_cycle ? XHCI_TRB_CYCLE : 0);
+
+    slot->hid_ep_enqueue = index + 1;
+    if (slot->hid_ep_enqueue == (uint32_t)(XHCI_HID_RING_TRBS - 1))
+    {
+        slot->hid_ep_enqueue = 0;
+        slot->hid_ep_cycle ^= 1;
+
+        // Same Link TRB staleness issue as xhci_ring_advance() fixes for the
+        // command/EP0 rings: without this, the controller matches the Link
+        // TRB's original cycle bit on lap 1 by construction, then finds it
+        // stale on lap 2 and silently stops delivering HID reports forever.
+        struct xhci_trb *link = &slot->hid_ep_ring[XHCI_HID_RING_TRBS - 1];
+        link->control = (link->control & ~XHCI_TRB_CYCLE) | (slot->hid_ep_cycle ? XHCI_TRB_CYCLE : 0);
+    }
+
+    g_xhci.db[slot_id] = slot->hid_ep_dci;
+}
+
+// Non-blocking: called every timer tick to drain any HID keyboard/mouse
+// report currently sitting in the event ring. A single peek at the cycle
+// bit, no spin — safe to call from inside the timer interrupt.
+void xhci_poll_hid_devices()
+{
+    if (g_xhci_keyboard_slot < 0 && g_xhci_mouse_slot < 0)
+    {
+        return;
+    }
+
+    struct xhci_trb *evt = &g_xhci.evt_ring[g_xhci.evt_dequeue];
+    uint32_t cycle_bit = evt->control & XHCI_TRB_CYCLE;
+    if ((cycle_bit != 0) != (g_xhci.evt_cycle != 0))
+    {
+        return;
+    }
+
+    uint32_t type = XHCI_TRB_TYPE_OF(evt->control);
+    uint32_t completion_code = (evt->status >> 24) & 0xFF;
+    uint32_t event_slot_id = (evt->control >> 24) & 0xFF;
+    uint32_t endpoint_id = (evt->control >> 16) & 0x1F;
+    uint64_t completed_trb_addr = evt->parameter;
+    uint32_t remaining = evt->status & 0xFFFFFF;
+
+    g_xhci.evt_dequeue++;
+    if (g_xhci.evt_dequeue == XHCI_EVT_RING_TRBS)
+    {
+        g_xhci.evt_dequeue = 0;
+        g_xhci.evt_cycle ^= 1;
+    }
+
+    uint64_t erdp = ((uint64_t)(uintptr_t)&g_xhci.evt_ring[g_xhci.evt_dequeue]) | (1u << 3);
+    xhci_ir_write64(XHCI_IR_ERDP, erdp);
+
+    if (type != XHCI_TRB_TYPE_TRANSFER_EVENT)
+    {
+        return;
+    }
+
+    if ((int)event_slot_id == g_xhci_keyboard_slot)
+    {
+        struct xhci_slot_state *slot = &g_xhci_slots[g_xhci_keyboard_slot];
+        if (slot->has_hid_ep && endpoint_id == slot->hid_ep_dci)
+        {
+            xhci_service_hid_completion(slot, g_xhci_keyboard_slot, completed_trb_addr, remaining, completion_code, usbhid_keyboard_process_report);
+        }
+    }
+    else if ((int)event_slot_id == g_xhci_mouse_slot)
+    {
+        struct xhci_slot_state *slot = &g_xhci_slots[g_xhci_mouse_slot];
+        if (slot->has_hid_ep && endpoint_id == slot->hid_ep_dci)
+        {
+            xhci_service_hid_completion(slot, g_xhci_mouse_slot, completed_trb_addr, remaining, completion_code, usbhid_mouse_process_report);
+        }
     }
 }
 
@@ -913,7 +1229,9 @@ static void xhci_enumerate_port(int port_index)
         return;
     }
 
-    xhci_print_config_interfaces(cfg_full, total_len);
+    struct xhci_hid_ep_info kbd_ep = {0};
+    struct xhci_hid_ep_info mouse_ep = {0};
+    xhci_walk_config(cfg_full, total_len, &kbd_ep, &mouse_ep);
 
     if (!xhci_set_configuration(slot, slot_id, config_value))
     {
@@ -924,6 +1242,33 @@ static void xhci_enumerate_port(int port_index)
     print("xHCI: Set Configuration ok, value=");
     print(itoa(config_value));
     print("\n");
+
+    if (kbd_ep.found && g_xhci_keyboard_slot < 0)
+    {
+        if (!xhci_set_boot_protocol(slot, slot_id, kbd_ep.interface_number))
+        {
+            print("xHCI: Set Protocol (boot) failed for keyboard, reports may be misparsed\n");
+        }
+
+        if (xhci_setup_hid_interrupt_endpoint(slot, slot_id, speed, &kbd_ep))
+        {
+            g_xhci_keyboard_slot = slot_id;
+            usbhid_keyboard_reset();
+        }
+    }
+    else if (mouse_ep.found && g_xhci_mouse_slot < 0)
+    {
+        if (!xhci_set_boot_protocol(slot, slot_id, mouse_ep.interface_number))
+        {
+            print("xHCI: Set Protocol (boot) failed for mouse, reports may be misparsed\n");
+        }
+
+        if (xhci_setup_hid_interrupt_endpoint(slot, slot_id, speed, &mouse_ep))
+        {
+            g_xhci_mouse_slot = slot_id;
+            usbhid_mouse_attach();
+        }
+    }
 }
 
 static void xhci_enumerate_connected_ports()

@@ -9,6 +9,7 @@
 #include "status.h"
 #include "string/string.h"
 #include "memory/heap/heap.h"
+#include "usb/xhci.h"
 
 extern struct heap kernel_minimal_heap;
 
@@ -161,6 +162,7 @@ void idt_handle_exception(struct interrupt_frame *frame)
 void idt_clock()
 {
     outb(0x20, 0x20);
+    xhci_poll_hid_devices();
     if (!task_current())
     {
         return;
