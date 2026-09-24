@@ -490,9 +490,14 @@ void window_draw_title_bar(struct window *window, struct framebuffer_pixel title
     // draww the background of the title bar
     terminal_draw_rect(window->title_bar_terminal, 0, 0, total_window_width_bounds, WINDOW_TITLE_BAR_HEIGHT, title_bar_bg_color);
 
-    // Draw the title text
-    terminal_cursor_set(window->title_bar_terminal, 0, 0);
-    terminal_print(window->title_bar_terminal, title);
+    // Title on the left, vertically centred. Off-white: the close icon leaves
+    // the bar ignoring pure white, which would drop the text.
+    struct framebuffer_pixel title_color = {0};
+    title_color.red = 0xf2;
+    title_color.green = 0xf2;
+    title_color.blue = 0xf2;
+    font_draw_text(window->title_bar_graphics, window->title_bar_terminal->font, WINDOW_TITLE_TEXT_PADDING,
+                   (WINDOW_TITLE_BAR_HEIGHT - FONT_IMAGE_CHARACTER_HEIGHT_PIXEL_SIZE) / 2, title, title_color);
 
     window_title_bar_layout_icons(window);
 
