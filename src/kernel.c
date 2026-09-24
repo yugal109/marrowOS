@@ -1,4 +1,5 @@
 #include "kernel.h"
+#include "io/io.h"
 #include <stddef.h>
 #include <stdint.h>
 #include "idt/idt.h"
@@ -9,6 +10,7 @@
 #include "io/tsc.h"
 #include "io/pci.h"
 #include "usb/xhci.h"
+#include "usb/ehci.h"
 #include "graphics/graphics.h"
 #include "graphics/font.h"
 #include "fs/pparser.h"
@@ -52,6 +54,51 @@ void print(const char *str)
     }
 }
 
+// Reset Control register: latch the type (full), then start the reset
+#define RESET_CONTROL_PORT 0xCF9
+#define RESET_CONTROL_FULL 0x02
+#define RESET_CONTROL_START 0x04
+// 8042 keyboard controller: pulses the CPU reset line
+#define KBC_COMMAND_PORT 0x64
+#define KBC_STATUS_INPUT_FULL 0x02
+#define KBC_PULSE_RESET 0xFE
+
+void system_reboot()
+{
+    __asm__ volatile("cli");
+
+    outb(RESET_CONTROL_PORT, RESET_CONTROL_FULL);
+    outb(RESET_CONTROL_PORT, RESET_CONTROL_FULL | RESET_CONTROL_START);
+    for (volatile int i = 0; i < 1000000; i++)
+    {
+        // delay
+    }
+
+    // Chipset reset ignored: try the keyboard controller
+    for (int i = 0; i < 100000 && (insb(KBC_COMMAND_PORT) & KBC_STATUS_INPUT_FULL); i++)
+    {
+        // wait for the controller's input buffer to drain
+    }
+    outb(KBC_COMMAND_PORT, KBC_PULSE_RESET);
+    for (volatile int i = 0; i < 1000000; i++)
+    {
+        // delay
+    }
+
+    // Last resort: an interrupt with an empty IDT triple-faults the CPU
+    struct
+    {
+        uint16_t limit;
+        uint64_t base;
+    } __attribute__((packed)) empty_idt = {0, 0};
+    __asm__ volatile("lidt %0; int3" ::"m"(empty_idt));
+
+    while (1)
+    {
+        __asm__ volatile("hlt");
+    }
+}
+
 void panic(const char *msg)
 {
     // If terminal isn't up yet, paint the FB so we don't die on a silent black screen
@@ -65,6 +112,19 @@ void panic(const char *msg)
             {
                 gi->framebuffer[y * gi->pixels_per_scanline + x] = red;
             }
+        }
+    }
+    // The reveal gate drops terminal output until boot finishes; open it so msg shows
+    graphics_reveal_enable();
+
+    // Panic before the terminal exists: build one here
+    if (!system_terminal && gi)
+    {
+        struct font *font = font_get_system_font();
+        if (font)
+        {
+            struct framebuffer_pixel white = {.red = 0xff, .green = 0xff, .blue = 0xff, .reserved = 0};
+            system_terminal = terminal_create(gi, 0, 0, gi->width, gi->height, font, white, 0);
         }
     }
     print(msg);
@@ -396,12 +456,14 @@ void kernel_main()
     // after the terminal exists and before the reveal, or the reveal gate
     // hides it and the wallpaper draws over it.
     xhci_init();
+    ehci_init();
 
     // Show the desktop only now, as it becomes interactive
     graphics_reveal_enable();
     graphics_redraw_all();
 
-    // unmask timer IRQ0, or tasks never switch
+    // Unmask timer IRQ0 or tasks never switch; tick fast enough to poll USB
+    idt_timer_frequency_set();
     IRQ_enable(IRQ_TIMER);
 
     // Drop to user land

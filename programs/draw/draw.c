@@ -10,11 +10,14 @@
 #define DRAW_BRUSH_SIZE 3
 #define ERASER_BRUSH_SIZE 14
 
-#define TOOLBAR_HEIGHT 44
-#define TOOLBAR_MARGIN 10
-#define TOOLBAR_BTN_SIZE 28
-#define TOOLBAR_BTN_GAP 10
-#define TOOLBAR_TOTAL_BTNS 6
+#define TOOLBAR_HEIGHT 30
+#define TOOLBAR_MARGIN 8
+#define TOOLBAR_BTN_SIZE 20
+#define TOOLBAR_BTN_GAP 8
+// Button glyphs scale with the button size
+#define TOOLBAR_BTN_INSET (TOOLBAR_BTN_SIZE / 4)
+#define TOOLBAR_RING 2
+#define TOOLBAR_TOTAL_BTNS 7
 
 // Keeps strokes off the window edge, where they leave line artifacts
 #define CANVAS_MARGIN 10
@@ -24,6 +27,7 @@ enum
     TOOLBAR_BTN_RED = 0,
     TOOLBAR_BTN_GREEN,
     TOOLBAR_BTN_BLUE,
+    TOOLBAR_BTN_BLACK,
     TOOLBAR_BTN_ERASER,
     TOOLBAR_BTN_UNDO,
     TOOLBAR_BTN_CLEAR,
@@ -167,7 +171,7 @@ void toolbar_draw(struct graphics *canvas, int window_width, struct framebuffer_
     struct framebuffer_pixel color_undo_bg = {.red = 0xa8, .green = 0xa8, .blue = 0xa8, .reserved = 0};
     struct framebuffer_pixel color_clear_bg = {.red = 0xe6, .green = 0xb8, .blue = 0x8a, .reserved = 0};
     struct framebuffer_pixel swatch_colors[TOOLBAR_TOTAL_BTNS] = {
-        color_red, color_green, color_blue, color_white, color_undo_bg, color_clear_bg};
+        color_red, color_green, color_blue, color_ink, color_white, color_undo_bg, color_clear_bg};
 
     int y = toolbar_btn_y();
     for (int i = 0; i < TOOLBAR_TOTAL_BTNS; i++)
@@ -182,19 +186,24 @@ void toolbar_draw(struct graphics *canvas, int window_width, struct framebuffer_
 
     // Marks the white swatch as the eraser, not "no color"
     int eraser_x = toolbar_btn_x(TOOLBAR_BTN_ERASER);
-    graphics_draw_rect(canvas, eraser_x + 6, y + 10, TOOLBAR_BTN_SIZE - 12, 8, eraser_mark);
+    int mark_h = TOOLBAR_BTN_SIZE / 4;
+    graphics_draw_rect(canvas, eraser_x + TOOLBAR_BTN_INSET, y + (TOOLBAR_BTN_SIZE - mark_h) / 2,
+                       TOOLBAR_BTN_SIZE - (TOOLBAR_BTN_INSET * 2), mark_h, eraser_mark);
 
     // Undo arrow: a shaft with a small back-pointing arrowhead.
     int undo_x = toolbar_btn_x(TOOLBAR_BTN_UNDO);
     int cy = y + TOOLBAR_BTN_SIZE / 2;
-    draw_line(canvas, undo_x + 7, cy, undo_x + TOOLBAR_BTN_SIZE - 6, cy, 2, toolbar_border);
-    draw_line(canvas, undo_x + 7, cy, undo_x + 13, cy - 6, 2, toolbar_border);
-    draw_line(canvas, undo_x + 7, cy, undo_x + 13, cy + 6, 2, toolbar_border);
+    int head = TOOLBAR_BTN_SIZE / 4;
+    int tail = undo_x + TOOLBAR_BTN_INSET;
+    draw_line(canvas, tail, cy, undo_x + TOOLBAR_BTN_SIZE - TOOLBAR_BTN_INSET, cy, 2, toolbar_border);
+    draw_line(canvas, tail, cy, tail + head, cy - head, 2, toolbar_border);
+    draw_line(canvas, tail, cy, tail + head, cy + head, 2, toolbar_border);
 
     // Clear "X" mark.
     int clear_x = toolbar_btn_x(TOOLBAR_BTN_CLEAR);
-    draw_line(canvas, clear_x + 7, y + 7, clear_x + TOOLBAR_BTN_SIZE - 7, y + TOOLBAR_BTN_SIZE - 7, 2, toolbar_border);
-    draw_line(canvas, clear_x + TOOLBAR_BTN_SIZE - 7, y + 7, clear_x + 7, y + TOOLBAR_BTN_SIZE - 7, 2, toolbar_border);
+    int far = TOOLBAR_BTN_SIZE - TOOLBAR_BTN_INSET;
+    draw_line(canvas, clear_x + TOOLBAR_BTN_INSET, y + TOOLBAR_BTN_INSET, clear_x + far, y + far, 2, toolbar_border);
+    draw_line(canvas, clear_x + far, y + TOOLBAR_BTN_INSET, clear_x + TOOLBAR_BTN_INSET, y + far, 2, toolbar_border);
 
     // Highlight whichever color/eraser swatch is currently active.
     for (int i = 0; i < TOOLBAR_BTN_UNDO; i++)
@@ -202,10 +211,11 @@ void toolbar_draw(struct graphics *canvas, int window_width, struct framebuffer_
         if (colors_equal(swatch_colors[i], current_color))
         {
             int x = toolbar_btn_x(i);
-            graphics_draw_rect(canvas, x - 3, y - 3, TOOLBAR_BTN_SIZE + 6, 3, toolbar_border);
-            graphics_draw_rect(canvas, x - 3, y + TOOLBAR_BTN_SIZE, TOOLBAR_BTN_SIZE + 6, 3, toolbar_border);
-            graphics_draw_rect(canvas, x - 3, y - 3, 3, TOOLBAR_BTN_SIZE + 6, toolbar_border);
-            graphics_draw_rect(canvas, x + TOOLBAR_BTN_SIZE, y - 3, 3, TOOLBAR_BTN_SIZE + 6, toolbar_border);
+            int ring_span = TOOLBAR_BTN_SIZE + (TOOLBAR_RING * 2);
+            graphics_draw_rect(canvas, x - TOOLBAR_RING, y - TOOLBAR_RING, ring_span, TOOLBAR_RING, toolbar_border);
+            graphics_draw_rect(canvas, x - TOOLBAR_RING, y + TOOLBAR_BTN_SIZE, ring_span, TOOLBAR_RING, toolbar_border);
+            graphics_draw_rect(canvas, x - TOOLBAR_RING, y - TOOLBAR_RING, TOOLBAR_RING, ring_span, toolbar_border);
+            graphics_draw_rect(canvas, x + TOOLBAR_BTN_SIZE, y - TOOLBAR_RING, TOOLBAR_RING, ring_span, toolbar_border);
             break;
         }
     }
@@ -216,7 +226,7 @@ int main(int argc, char **argv)
     graphics_image_formats_init();
     font_system_init();
 
-    struct window *main_win = window_create("Draw", 800, 600, 0, 556);
+    struct window *main_win = window_create("Draw", 560, 400, 0, 556);
     if (!main_win)
     {
         return -1;
@@ -286,6 +296,11 @@ int main(int argc, char **argv)
 
                     case TOOLBAR_BTN_BLUE:
                         current_color = color_blue;
+                        current_brush = DRAW_BRUSH_SIZE;
+                        break;
+
+                    case TOOLBAR_BTN_BLACK:
+                        current_color = color_ink;
                         current_brush = DRAW_BRUSH_SIZE;
                         break;
 

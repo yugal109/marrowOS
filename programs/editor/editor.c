@@ -6,7 +6,7 @@
 #include "font.h"
 
 #define EDITOR_TEXT_INITIAL_CAPACITY 4096
-#define EDITOR_MARGIN 10
+#define EDITOR_MARGIN 6
 #define EDITOR_KEY_BACKSPACE 0x08
 #define EDITOR_KEY_ENTER 0x0d
 
@@ -246,7 +246,7 @@ int main(int argc, char **argv)
     graphics_image_formats_init();
     font_system_init();
 
-    struct window *main_win = window_create("Editor", 800, 600, 0, 557);
+    struct window *main_win = window_create("Editor", 560, 400, 0, 557);
     if (!main_win)
     {
         return -1;

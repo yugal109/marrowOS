@@ -10,6 +10,11 @@
 // Holds all the loaded mouse drivers
 struct vector *mouse_driver_vector = NULL;
 
+// Handlers for "every mouse" (mouse == NULL), so mice registering later get them too
+static struct vector *mouse_global_click_handlers = NULL;
+static struct vector *mouse_global_move_handlers = NULL;
+static struct vector *mouse_global_release_handlers = NULL;
+
 // Cursor arrow image, loaded once and reused for every redraw
 static struct image *mouse_cursor_image = NULL;
 
@@ -29,7 +34,10 @@ int mouse_system_init()
 {
     int res = 0;
     mouse_driver_vector = vector_new(sizeof(struct mouse *), 4, 0);
-    if (!mouse_driver_vector)
+    mouse_global_click_handlers = vector_new(sizeof(MOUSE_CLICK_EVENT_HANDLER_FUNCTION), 4, 0);
+    mouse_global_move_handlers = vector_new(sizeof(MOUSE_MOVE_EVENT_HANDLER_FUNCTION), 4, 0);
+    mouse_global_release_handlers = vector_new(sizeof(MOUSE_RELEASE_EVENT_HANDLER_FUNCTION), 4, 0);
+    if (!mouse_driver_vector || !mouse_global_click_handlers || !mouse_global_move_handlers || !mouse_global_release_handlers)
     {
         res = -ENOMEM;
         goto out;
@@ -65,6 +73,20 @@ void mouse_draw_default_impl(struct mouse *mouse)
     struct framebuffer_pixel pixel_color = {0};
     pixel_color.red = 0xf3;
     terminal_draw_rect(win_term, 0, 0, win_term->bounds.width, win_term->bounds.height, pixel_color);
+}
+
+static void mouse_copy_handlers(struct vector *from, struct vector *to, size_t handler_size)
+{
+    size_t total = vector_count(from);
+    for (size_t i = 0; i < total; i++)
+    {
+        void *handler = NULL;
+        vector_at(from, i, &handler, handler_size);
+        if (handler)
+        {
+            vector_push(to, &handler);
+        }
+    }
 }
 
 int mouse_register(struct mouse *mouse)
@@ -132,6 +154,11 @@ int mouse_register(struct mouse *mouse)
     }
 
     mouse->draw(mouse);
+
+    mouse_copy_handlers(mouse_global_click_handlers, mouse->event_handlers.click_handlers, sizeof(MOUSE_CLICK_EVENT_HANDLER_FUNCTION));
+    mouse_copy_handlers(mouse_global_move_handlers, mouse->event_handlers.move_handlers, sizeof(MOUSE_MOVE_EVENT_HANDLER_FUNCTION));
+    mouse_copy_handlers(mouse_global_release_handlers, mouse->event_handlers.release_handlers, sizeof(MOUSE_RELEASE_EVENT_HANDLER_FUNCTION));
+
     vector_push(mouse_driver_vector, &mouse);
 out:
     return res;
@@ -196,12 +223,9 @@ void mouse_unregister_move_handler(struct mouse *mouse, MOUSE_MOVE_EVENT_HANDLER
         return;
     }
 
-    size_t total_mice = vector_count(mouse_driver_vector);
-    if (total_mice == 0)
-    {
-        panic("NO Mice driers are registered\n");
-    }
+    vector_pop_element(mouse_global_move_handlers, &move_handler, sizeof(move_handler));
 
+    size_t total_mice = vector_count(mouse_driver_vector);
     for (size_t i = 0; i < total_mice; i++)
     {
         struct mouse *_mouse = NULL;
@@ -221,12 +245,9 @@ void mouse_unregister_click_handler(struct mouse *mouse, MOUSE_CLICK_EVENT_HANDL
         return;
     }
 
-    size_t total_mice = vector_count(mouse_driver_vector);
-    if (total_mice == 0)
-    {
-        panic("NO mice drivers are reigstered\n");
-    }
+    vector_pop_element(mouse_global_click_handlers, &click_handler, sizeof(click_handler));
 
+    size_t total_mice = vector_count(mouse_driver_vector);
     for (size_t i = 0; i < total_mice; i++)
     {
         struct mouse *_mouse = NULL;
@@ -246,12 +267,9 @@ void mouse_register_move_handler(struct mouse *mouse, MOUSE_MOVE_EVENT_HANDLER_F
         return;
     }
 
-    size_t total_mice = vector_count(mouse_driver_vector);
-    if (total_mice == 0)
-    {
-        panic("NO Mice drivers are registered\n");
-    }
+    vector_push(mouse_global_move_handlers, &move_handler);
 
+    size_t total_mice = vector_count(mouse_driver_vector);
     for (size_t i = 0; i < total_mice; i++)
     {
         struct mouse *_mouse = NULL;
@@ -271,12 +289,9 @@ void mouse_register_release_handler(struct mouse *mouse, MOUSE_RELEASE_EVENT_HAN
         return;
     }
 
-    size_t total_mice = vector_count(mouse_driver_vector);
-    if (total_mice == 0)
-    {
-        panic("NO Mice drivers are registered\n");
-    }
+    vector_push(mouse_global_release_handlers, &release_handler);
 
+    size_t total_mice = vector_count(mouse_driver_vector);
     for (size_t i = 0; i < total_mice; i++)
     {
         struct mouse *_mouse = NULL;
@@ -296,12 +311,9 @@ void mouse_register_click_handler(struct mouse *mouse, MOUSE_CLICK_EVENT_HANDLER
         return;
     }
 
-    size_t total_mice = vector_count(mouse_driver_vector);
-    if (total_mice == 0)
-    {
-        panic("NO mice drivers installed\n");
-    }
+    vector_push(mouse_global_click_handlers, &click_handler);
 
+    size_t total_mice = vector_count(mouse_driver_vector);
     for (size_t i = 0; i < total_mice; i++)
     {
         struct mouse *_mouse = NULL;

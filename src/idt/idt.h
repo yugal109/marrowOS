@@ -77,6 +77,9 @@ struct interrupt_frame
 } __attribute__((packed));
 
 void idt_init();
+
+// Sets the IRQ0 tick rate (USB input is polled from it)
+void idt_timer_frequency_set();
 void enable_interrupts();
 void disable_interrupts();
 void isr80h_register_command(int command_id, ISR80H_COMMAND command);

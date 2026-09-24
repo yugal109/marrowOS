@@ -228,7 +228,7 @@ int main(int argc, char **argv)
     graphics_image_formats_init();
     font_system_init();
 
-    struct window *main_win = window_create("Calculator", 400, 500, 0, 555);
+    struct window *main_win = window_create("Calculator", 280, 300, 0, 555);
     if (!main_win)
     {
         return -1;
@@ -242,9 +242,9 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    int padding = 10;
-    int textfield_height = 100;
-    int button_height = 50;
+    int padding = 8;
+    int textfield_height = 56;
+    int button_height = 36;
 
     int textfield_width = main_win->width - (padding * 2);
     if (textfield_width <= 0)

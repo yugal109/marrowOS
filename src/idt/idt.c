@@ -10,6 +10,7 @@
 #include "string/string.h"
 #include "memory/heap/heap.h"
 #include "usb/xhci.h"
+#include "usb/ehci.h"
 
 extern struct heap kernel_minimal_heap;
 
@@ -159,10 +160,38 @@ void idt_handle_exception(struct interrupt_frame *frame)
     panic(msg);
 }
 
+// USB HID is polled from this tick, one report per poll. At the PIT default of
+// ~18Hz a device that blocks until its report is read piles motion up and
+// releases it in bursts, so tick fast and switch tasks every Nth tick (~18Hz).
+#define IDT_TIMER_HZ 500
+#define IDT_SCHEDULER_DIVIDER 27
+#define IDT_PIT_BASE_HZ 1193182
+#define IDT_PIT_CHANNEL0 0x40
+#define IDT_PIT_COMMAND 0x43
+// channel 0, lo/hi byte, mode 3, binary
+#define IDT_PIT_CMD_CHANNEL0_MODE3 0x36
+
+void idt_timer_frequency_set()
+{
+    uint16_t divisor = IDT_PIT_BASE_HZ / IDT_TIMER_HZ;
+    outb(IDT_PIT_COMMAND, IDT_PIT_CMD_CHANNEL0_MODE3);
+    outb(IDT_PIT_CHANNEL0, divisor & 0xFF);
+    outb(IDT_PIT_CHANNEL0, divisor >> 8);
+}
+
+static uint32_t idt_clock_ticks = 0;
+
 void idt_clock()
 {
     outb(0x20, 0x20);
     xhci_poll_hid_devices();
+    ehci_poll_hid_devices();
+
+    if (++idt_clock_ticks % IDT_SCHEDULER_DIVIDER != 0)
+    {
+        return;
+    }
+
     if (!task_current())
     {
         return;

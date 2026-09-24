@@ -320,8 +320,26 @@ struct process_window *process_window_create(struct process *process, char *titl
     }
 
     struct graphics_info *screen_graphics = graphics_screen_info();
-    size_t abs_x = (screen_graphics->width / 2) - (width / 2);
-    size_t abs_y = (screen_graphics->height / 2) - (height / 2);
+
+    // Border and title bar sit outside the requested size
+    size_t frame_extra_w = WINDOW_BORDER_PIXEL_SIZE * 2;
+    size_t frame_extra_h = WINDOW_TITLE_BAR_HEIGHT + WINDOW_BORDER_PIXEL_SIZE;
+
+    // Shrink to fit: a window that overflows the screen fails to create and the app never appears
+    size_t max_width = screen_graphics->width - frame_extra_w;
+    size_t max_height = screen_graphics->height - frame_extra_h - WINDOW_DOCK_HEIGHT;
+    if ((size_t)width > max_width)
+    {
+        width = max_width;
+    }
+    if ((size_t)height > max_height)
+    {
+        height = max_height;
+    }
+
+    // Centre the whole frame, above the dock
+    size_t abs_x = (screen_graphics->width - (width + frame_extra_w)) / 2;
+    size_t abs_y = (screen_graphics->height - WINDOW_DOCK_HEIGHT - (height + frame_extra_h)) / 2;
 
     int create_flags = flags;
     if (process->start_hidden)

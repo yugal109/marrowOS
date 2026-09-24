@@ -1,12 +1,12 @@
 #ifndef USBHID_MOUSE_H
 #define USBHID_MOUSE_H
 
+#include "usb/hidreport.h"
 #include <stdint.h>
 
 struct mouse;
 
-// Registered with mouse.c the first time xhci.c finds and configures a HID
-// boot-protocol mouse — mirrors ps2_mouse_get()'s role for the PS/2 driver.
+// The USB HID mouse, registered with mouse.c on first attach
 struct mouse *usbhid_mouse_get();
 
 // Registers the USB mouse with mouse.c (creates its cursor window). Call
@@ -14,8 +14,11 @@ struct mouse *usbhid_mouse_get();
 // not from interrupt context.
 int usbhid_mouse_attach();
 
-// Feeds one raw interrupt IN report from a HID boot-protocol mouse. Boot
-// mouse reports are 3-4 bytes: [buttons][dx][dy][wheel, optional].
+
+// Feeds one boot-protocol report
 void usbhid_mouse_process_report(const uint8_t *buf, uint32_t len);
+
+// Feeds one report decoded with that device's own layout; NULL/invalid = boot layout
+void usbhid_mouse_process_report_layout(const struct hid_mouse_layout *layout, const uint8_t *buf, uint32_t len);
 
 #endif

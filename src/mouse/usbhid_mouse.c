@@ -21,15 +21,6 @@ struct mouse usbhid_mouse = {
 static MOUSE_CLICK_TYPE usbhid_mouse_prev_click_type = MOUSE_NO_CLICK;
 static bool usbhid_mouse_registered = false;
 
-static const char *usbhid_hex8(uint8_t value)
-{
-    static char buf[3];
-    const char *digits = "0123456789ABCDEF";
-    buf[0] = digits[(value >> 4) & 0xF];
-    buf[1] = digits[value & 0xF];
-    buf[2] = 0;
-    return buf;
-}
 
 struct mouse *usbhid_mouse_get()
 {
@@ -37,6 +28,11 @@ struct mouse *usbhid_mouse_get()
 }
 
 void usbhid_mouse_process_report(const uint8_t *buf, uint32_t len)
+{
+    usbhid_mouse_process_report_layout(NULL, buf, len);
+}
+
+void usbhid_mouse_process_report_layout(const struct hid_mouse_layout *layout, const uint8_t *buf, uint32_t len)
 {
     if (len < 3)
     {
@@ -48,28 +44,36 @@ void usbhid_mouse_process_report(const uint8_t *buf, uint32_t len)
         return;
     }
 
-    // Temporary: print the raw bytes of the first few reports so a layout
-    // mismatch (wrong protocol, extra report-ID byte, different resolution)
-    // is visible instead of just showing up as "weird movement." Remove
-    // once real hardware is confirmed matching the assumed boot layout.
-    static int debug_reports_left = 5;
-    if (debug_reports_left > 0)
-    {
-        debug_reports_left--;
-        print("usbhid_mouse: raw report len=");
-        print(itoa(len));
-        print(" bytes=");
-        for (uint32_t i = 0; i < len; i++)
-        {
-            print(usbhid_hex8(buf[i]));
-            print(" ");
-        }
-        print("\n");
-    }
+    uint8_t buttons;
+    int dx;
+    int dy;
 
-    uint8_t buttons = buf[0];
-    int8_t dx = (int8_t)buf[1];
-    int8_t dy = (int8_t)buf[2];
+    if (layout && layout->valid)
+    {
+        // Layout offsets start after the report ID byte
+        if (layout->report_id != 0)
+        {
+            if (buf[0] != layout->report_id)
+            {
+                // Another report on the same endpoint
+                return;
+            }
+
+            buf++;
+            len--;
+        }
+
+        buttons = (uint8_t)hid_extract_unsigned(buf, len, layout->button_bit, layout->button_count);
+        dx = hid_extract_signed(buf, len, layout->x_bit, layout->x_bits);
+        dy = hid_extract_signed(buf, len, layout->y_bit, layout->y_bits);
+    }
+    else
+    {
+        // No layout: fixed boot layout
+        buttons = buf[0];
+        dx = (int8_t)buf[1];
+        dy = (int8_t)buf[2];
+    }
 
     int x_result = (int)usbhid_mouse.coords.x + dx;
     // USB HID boot mouse reports positive Y as "pointer moves down", which
@@ -138,7 +142,6 @@ int usbhid_mouse_attach()
     int res = mouse_register(&usbhid_mouse);
     if (res < 0)
     {
-        print("usbhid: failed to register mouse\n");
         return res;
     }
 

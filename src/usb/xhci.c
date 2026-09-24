@@ -326,7 +326,6 @@ static bool xhci_reset()
 
     if (!xhci_wait_usbsts(XHCI_USBSTS_HCHALTED, XHCI_USBSTS_HCHALTED))
     {
-        print("xHCI: timed out waiting for halt before reset\n");
         return false;
     }
 
@@ -344,7 +343,6 @@ static bool xhci_reset()
         __asm__ __volatile__("pause");
     }
 
-    print("xHCI: timed out waiting for reset to finish\n");
     return false;
 }
 
@@ -376,9 +374,6 @@ static void xhci_setup_scratchpad(uint32_t hcsparams2)
     // DCBAA[0] is reserved for the scratchpad buffer array pointer.
     g_xhci.dcbaa[0] = (uint64_t)(uintptr_t)array;
 
-    print("xHCI: scratchpad buffers=");
-    print(itoa(max_scratchpad));
-    print("\n");
 }
 
 static void xhci_setup_command_ring()
@@ -420,27 +415,10 @@ static bool xhci_run()
 
     if (!xhci_wait_usbsts(XHCI_USBSTS_HCHALTED, 0))
     {
-        print("xHCI: timed out waiting for controller to start\n");
         return false;
     }
 
     return true;
-}
-
-static void xhci_report_ports()
-{
-    for (int port = 0; port < g_xhci.max_ports; port++)
-    {
-        uint32_t portsc = *(volatile uint32_t *)(g_xhci.op + XHCI_OP_PORTSC_BASE + port * XHCI_OP_PORT_STRIDE);
-        if (portsc & XHCI_PORTSC_CCS)
-        {
-            print("xHCI: port ");
-            print(itoa(port + 1));
-            print(" connected, PORTSC=");
-            print(xhci_hex32(portsc));
-            print("\n");
-        }
-    }
 }
 
 // Advances *enqueue past the TRB just written. On wrap, the ring's Link TRB
@@ -489,20 +467,6 @@ static void xhci_test_noop_command()
         uint32_t cycle_bit = evt->control & XHCI_TRB_CYCLE;
         if ((cycle_bit != 0) == (g_xhci.evt_cycle != 0))
         {
-            uint32_t type = XHCI_TRB_TYPE_OF(evt->control);
-            if (type == XHCI_TRB_TYPE_CMD_COMPLETION)
-            {
-                uint32_t completion_code = (evt->status >> 24) & 0xFF;
-                print("xHCI: No-Op command completed, code=");
-                print(itoa(completion_code));
-                print(" (1 = success)\n");
-            }
-            else
-            {
-                print("xHCI: unexpected event type=");
-                print(itoa(type));
-                print("\n");
-            }
 
             g_xhci.evt_dequeue++;
             if (g_xhci.evt_dequeue == XHCI_EVT_RING_TRBS)
@@ -518,7 +482,6 @@ static void xhci_test_noop_command()
         __asm__ __volatile__("pause");
     }
 
-    print("xHCI: No-Op command timed out, no completion event seen\n");
 }
 
 // Consumes one event TRB of the given type from the event ring, updating
@@ -610,14 +573,12 @@ static bool xhci_port_reset(int port_index, uint8_t *speed_out)
 
     if (!saw_prc)
     {
-        print("xHCI: port reset timed out\n");
         return false;
     }
 
     uint32_t val = *portsc;
     if (!(val & XHCI_PORTSC_PED))
     {
-        print("xHCI: port did not enable after reset\n");
         return false;
     }
 
@@ -637,20 +598,12 @@ static int xhci_cmd_enable_slot()
     uint32_t slot_id = 0;
     if (!xhci_poll_event(XHCI_TRB_TYPE_CMD_COMPLETION, &code, &slot_id))
     {
-        print("xHCI: Enable Slot timed out\n");
         return -1;
     }
     if (code != 1)
     {
-        print("xHCI: Enable Slot failed, code=");
-        print(itoa(code));
-        print("\n");
         return -1;
     }
-
-    print("xHCI: Enable Slot ok, slot=");
-    print(itoa(slot_id));
-    print("\n");
 
     return (int)slot_id;
 }
@@ -710,18 +663,13 @@ static bool xhci_cmd_address_device(struct xhci_slot_state *slot, int slot_id, u
     uint32_t got_slot = 0;
     if (!xhci_poll_event(XHCI_TRB_TYPE_CMD_COMPLETION, &code, &got_slot))
     {
-        print("xHCI: Address Device timed out\n");
         return false;
     }
     if (code != 1)
     {
-        print("xHCI: Address Device failed, code=");
-        print(itoa(code));
-        print("\n");
         return false;
     }
 
-    print("xHCI: Address Device ok\n");
     return true;
 }
 
@@ -747,7 +695,6 @@ static bool xhci_cmd_evaluate_context_ep0_packet_size(struct xhci_slot_state *sl
     uint32_t got_slot = 0;
     if (!xhci_poll_event(XHCI_TRB_TYPE_CMD_COMPLETION, &code, &got_slot) || code != 1)
     {
-        print("xHCI: Evaluate Context failed\n");
         return false;
     }
 
@@ -801,7 +748,6 @@ static bool xhci_control_transfer(struct xhci_slot_state *slot, int slot_id, uin
     uint32_t code = 0;
     if (!xhci_poll_event(XHCI_TRB_TYPE_TRANSFER_EVENT, &code, NULL))
     {
-        print("xHCI: control transfer timed out\n");
         return false;
     }
 
@@ -847,6 +793,7 @@ struct xhci_hid_ep_info
 static void xhci_walk_config(uint8_t *cfg, uint16_t total_len, struct xhci_hid_ep_info *kbd_ep_out, struct xhci_hid_ep_info *mouse_ep_out)
 {
     uint8_t boot_protocol = 0; // 0 = none, matches neither HID_PROTOCOL_* value
+    bool is_hid_interface = false;
     uint8_t current_interface_number = 0;
     size_t off = 0;
     while (off + 2 <= total_len)
@@ -864,17 +811,10 @@ static void xhci_walk_config(uint8_t *cfg, uint16_t total_len, struct xhci_hid_e
             uint8_t if_subclass = cfg[off + 6];
             uint8_t if_protocol = cfg[off + 7];
 
-            print("xHCI:   interface ");
-            print(itoa(cfg[off + 2]));
-            print(" class=");
-            print(itoa(if_class));
-            print(" subclass=");
-            print(itoa(if_subclass));
-            print(" protocol=");
-            print(itoa(if_protocol));
-            print("\n");
-
-            boot_protocol = (if_class == 3 && if_subclass == HID_SUBCLASS_BOOT) ? if_protocol : 0;
+            // TinyUSB devices declare subclass/protocol 0, so don't require boot
+            is_hid_interface = (if_class == 3);
+            (void)if_subclass;
+            boot_protocol = is_hid_interface ? if_protocol : 0;
             current_interface_number = cfg[off + 2];
         }
         else if (b_type == USB_DESC_TYPE_ENDPOINT && off + 7 <= total_len)
@@ -884,7 +824,7 @@ static void xhci_walk_config(uint8_t *cfg, uint16_t total_len, struct xhci_hid_e
             {
                 target = kbd_ep_out;
             }
-            else if (boot_protocol == HID_PROTOCOL_MOUSE && mouse_ep_out && !mouse_ep_out->found)
+            else if (is_hid_interface && mouse_ep_out && !mouse_ep_out->found)
             {
                 target = mouse_ep_out;
             }
@@ -988,9 +928,6 @@ static bool xhci_setup_hid_interrupt_endpoint(struct xhci_slot_state *slot, int 
     uint32_t got_slot = 0;
     if (!xhci_poll_event(XHCI_TRB_TYPE_CMD_COMPLETION, &code, &got_slot) || code != 1)
     {
-        print("xHCI: Configure Endpoint failed, code=");
-        print(itoa(code));
-        print("\n");
         return false;
     }
 
@@ -1016,12 +953,6 @@ static bool xhci_setup_hid_interrupt_endpoint(struct xhci_slot_state *slot, int 
 
     slot->has_hid_ep = true;
     g_xhci.db[slot_id] = dci;
-
-    print("xHCI: HID interrupt endpoint ready, addr=");
-    print(xhci_hex32(ep->ep_addr));
-    print(" maxPacket=");
-    print(itoa(ep->max_packet));
-    print("\n");
 
     return true;
 }
@@ -1050,12 +981,6 @@ static void xhci_service_hid_completion(struct xhci_slot_state *slot, int slot_i
     {
         uint32_t len = slot->hid_ep_max_packet - remaining;
         handler(buf, len);
-    }
-    else
-    {
-        print("xHCI: HID report completion code=");
-        print(itoa(completion_code));
-        print(" (re-arming anyway)\n");
     }
 
     // Re-arm this same ring slot. Production only ever happens one-for-one
@@ -1144,9 +1069,6 @@ void xhci_poll_hid_devices()
 // read descriptors, set configuration.
 static void xhci_enumerate_port(int port_index)
 {
-    print("xHCI: enumerating port ");
-    print(itoa(port_index + 1));
-    print("\n");
 
     uint8_t speed = 0;
     if (!xhci_port_reset(port_index, &speed))
@@ -1157,7 +1079,6 @@ static void xhci_enumerate_port(int port_index)
     int slot_id = xhci_cmd_enable_slot();
     if (slot_id <= 0 || slot_id >= XHCI_MAX_TRACKED_SLOTS)
     {
-        print("xHCI: slot id out of tracked range\n");
         return;
     }
 
@@ -1176,7 +1097,6 @@ static void xhci_enumerate_port(int port_index)
     uint8_t desc_buf[18];
     if (!xhci_get_descriptor(slot, slot_id, USB_DESC_DEVICE, 0, desc_buf, 8))
     {
-        print("xHCI: failed to read first 8 bytes of device descriptor\n");
         return;
     }
 
@@ -1191,25 +1111,12 @@ static void xhci_enumerate_port(int port_index)
 
     if (!xhci_get_descriptor(slot, slot_id, USB_DESC_DEVICE, 0, desc_buf, 18))
     {
-        print("xHCI: failed to read full device descriptor\n");
         return;
     }
-
-    struct usb_device_descriptor *dd = (struct usb_device_descriptor *)desc_buf;
-    print("xHCI: device VID=");
-    print(xhci_hex32(dd->idVendor));
-    print(" PID=");
-    print(xhci_hex32(dd->idProduct));
-    print(" class=");
-    print(itoa(dd->bDeviceClass));
-    print(" numConfigs=");
-    print(itoa(dd->bNumConfigurations));
-    print("\n");
 
     uint8_t cfg_head[9];
     if (!xhci_get_descriptor(slot, slot_id, USB_DESC_CONFIGURATION, 0, cfg_head, 9))
     {
-        print("xHCI: failed to read configuration descriptor header\n");
         return;
     }
 
@@ -1218,14 +1125,12 @@ static void xhci_enumerate_port(int port_index)
 
     if (total_len < 9 || total_len > 256)
     {
-        print("xHCI: implausible config wTotalLength\n");
         return;
     }
 
     uint8_t *cfg_full = kzalloc(total_len);
     if (!xhci_get_descriptor(slot, slot_id, USB_DESC_CONFIGURATION, 0, cfg_full, total_len))
     {
-        print("xHCI: failed to read full configuration descriptor\n");
         return;
     }
 
@@ -1235,20 +1140,12 @@ static void xhci_enumerate_port(int port_index)
 
     if (!xhci_set_configuration(slot, slot_id, config_value))
     {
-        print("xHCI: Set Configuration failed\n");
         return;
     }
 
-    print("xHCI: Set Configuration ok, value=");
-    print(itoa(config_value));
-    print("\n");
-
     if (kbd_ep.found && g_xhci_keyboard_slot < 0)
     {
-        if (!xhci_set_boot_protocol(slot, slot_id, kbd_ep.interface_number))
-        {
-            print("xHCI: Set Protocol (boot) failed for keyboard, reports may be misparsed\n");
-        }
+        xhci_set_boot_protocol(slot, slot_id, kbd_ep.interface_number);
 
         if (xhci_setup_hid_interrupt_endpoint(slot, slot_id, speed, &kbd_ep))
         {
@@ -1258,10 +1155,7 @@ static void xhci_enumerate_port(int port_index)
     }
     else if (mouse_ep.found && g_xhci_mouse_slot < 0)
     {
-        if (!xhci_set_boot_protocol(slot, slot_id, mouse_ep.interface_number))
-        {
-            print("xHCI: Set Protocol (boot) failed for mouse, reports may be misparsed\n");
-        }
+        xhci_set_boot_protocol(slot, slot_id, mouse_ep.interface_number);
 
         if (xhci_setup_hid_interrupt_endpoint(slot, slot_id, speed, &mouse_ep))
         {
@@ -1288,21 +1182,11 @@ int xhci_init()
     struct pci_device *dev = xhci_pci_find();
     if (!dev)
     {
-        print("xHCI: no controller found\n");
         return -1;
     }
 
-    print("xHCI: controller found bus=");
-    print(itoa(dev->addr.bus));
-    print(" slot=");
-    print(itoa(dev->addr.slot));
-    print(" func=");
-    print(itoa(dev->addr.func));
-    print("\n");
-
     if (dev->bars[0].addr == 0 || dev->bars[0].type != PCI_DEVICE_IO_MEMORY)
     {
-        print("xHCI: BAR0 is not a valid MMIO region\n");
         return -1;
     }
 
@@ -1328,22 +1212,10 @@ int xhci_init()
     g_xhci.max_ports = (hcsparams1 >> 24) & 0xFF;
     g_xhci_context_size = (hccparams1 & (1u << 2)) ? 64 : 32;
 
-    print("xHCI: CAPLENGTH=");
-    print(xhci_hex32(cap_length));
-    print(" HCCPARAMS1=");
-    print(xhci_hex32(hccparams1));
-    print("\n");
-    print("xHCI: MaxSlots=");
-    print(itoa(g_xhci.max_slots));
-    print(" MaxPorts=");
-    print(itoa(g_xhci.max_ports));
-    print("\n");
-
     if (!xhci_reset())
     {
         return -1;
     }
-    print("xHCI: reset ok\n");
 
     uint32_t config = xhci_op_read32(XHCI_OP_CONFIG);
     config = (config & ~0xFFu) | g_xhci.max_slots;
@@ -1358,10 +1230,8 @@ int xhci_init()
     {
         return -1;
     }
-    print("xHCI: running\n");
 
     xhci_test_noop_command();
-    xhci_report_ports();
     xhci_enumerate_connected_ports();
 
     return 0;

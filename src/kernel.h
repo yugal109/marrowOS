@@ -10,6 +10,9 @@
 void kernel_main();
 void print(const char *str);
 void panic(const char *msg);
+
+// Restarts the machine; does not return
+void system_reboot();
 void kernel_page();
 void kernel_registers();
 void terminal_writechar(char c, char color);

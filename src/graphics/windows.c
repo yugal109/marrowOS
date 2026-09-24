@@ -220,12 +220,17 @@ void window_show(struct window *window)
 // Dock: bottom bar, always on top. Icons with a program path launch it,
 // then toggle that window; the rest are decorative for now.
 
-#define WINDOW_DOCK_HEIGHT 60
-#define WINDOW_DOCK_ICON_MARGIN 16
-#define WINDOW_DOCK_ICON_GAP 12
-#define WINDOW_DOCK_DOT_SIZE 6
+// Icons are 48x48 bitmaps, drawn scaled to this
+#define WINDOW_DOCK_ICON_SIZE 24
+#define WINDOW_DOCK_ICON_MARGIN 10
+#define WINDOW_DOCK_ICON_GAP 8
+// Outline around an open app's icon
+#define WINDOW_DOCK_RING_THICKNESS 2
+#define WINDOW_DOCK_RING_GAP 1
 #define WINDOW_DOCK_ZINDEX 200000
 #define WINDOW_DOCK_TOTAL_ICONS 6
+// Settings icon restarts the machine for now
+#define WINDOW_DOCK_SLOT_RESTART 1
 
 // PS/2 fires click on every packet while held, so latch to act once.
 static bool dock_click_active = false;
@@ -233,6 +238,8 @@ static bool dock_click_active = false;
 static struct window *dock_window = NULL;
 // Window each icon toggles, once its process has launched and created one.
 static struct window *dock_target_windows[WINDOW_DOCK_TOTAL_ICONS] = {0};
+// Apps preload hidden, so track whether the window was ever shown
+static bool dock_target_shown_once[WINDOW_DOCK_TOTAL_ICONS] = {0};
 static struct image *dock_icons[WINDOW_DOCK_TOTAL_ICONS] = {0};
 static const char *dock_icon_paths[WINDOW_DOCK_TOTAL_ICONS] = {
     "@:/terminal.bmp",
@@ -254,9 +261,7 @@ static const char *dock_program_paths[WINDOW_DOCK_TOTAL_ICONS] = {
 
 size_t window_dock_icon_x(int index)
 {
-    // All icons are the same size, so [0]'s width works for every slot.
-    size_t icon_size = dock_icons[0] ? dock_icons[0]->width : 0;
-    return WINDOW_DOCK_ICON_MARGIN + (size_t)index * (icon_size + WINDOW_DOCK_ICON_GAP);
+    return WINDOW_DOCK_ICON_MARGIN + (size_t)index * (WINDOW_DOCK_ICON_SIZE + WINDOW_DOCK_ICON_GAP);
 }
 
 void window_dock_icon_redraw()
@@ -271,7 +276,7 @@ void window_dock_icon_redraw()
     white.green = 0xff;
     white.blue = 0xff;
 
-    size_t icon_size = dock_icons[0]->width;
+    size_t icon_size = WINDOW_DOCK_ICON_SIZE;
     size_t icon_y = (WINDOW_DOCK_HEIGHT - icon_size) / 2;
 
     terminal_ignore_color(dock_window->terminal, white);
@@ -279,13 +284,14 @@ void window_dock_icon_redraw()
     {
         if (dock_icons[i])
         {
-            terminal_draw_image(dock_window->terminal, window_dock_icon_x(i), icon_y, dock_icons[i]);
+            graphics_draw_image_scaled(dock_window->graphics, dock_icons[i], window_dock_icon_x(i), icon_y, WINDOW_DOCK_ICON_SIZE, WINDOW_DOCK_ICON_SIZE);
         }
     }
     terminal_ignore_color_finish(dock_window->terminal);
 
-    // Dot under each icon: green if that icon's window is visible, else
-    // blends into the white background.
+    // Green: on screen. Grey: shown once, now hidden. White: none (also erases).
+    size_t ring_offset = WINDOW_DOCK_RING_THICKNESS + WINDOW_DOCK_RING_GAP;
+    size_t ring_span = icon_size + (ring_offset * 2);
     for (int i = 0; i < WINDOW_DOCK_TOTAL_ICONS; i++)
     {
         if (!dock_icons[i])
@@ -294,17 +300,32 @@ void window_dock_icon_redraw()
         }
 
         bool is_visible = dock_target_windows[i] && !dock_target_windows[i]->root_graphics->hidden;
-        struct framebuffer_pixel dot_color = white;
         if (is_visible)
         {
-            dot_color.red = 0x5b;
-            dot_color.green = 0xd6;
-            dot_color.blue = 0x7a;
+            dock_target_shown_once[i] = true;
         }
 
-        size_t dot_x = window_dock_icon_x(i) + (icon_size / 2) - (WINDOW_DOCK_DOT_SIZE / 2);
-        size_t dot_y = icon_y + icon_size + 4;
-        graphics_draw_rect_rounded(dock_window->graphics, dot_x, dot_y, WINDOW_DOCK_DOT_SIZE, WINDOW_DOCK_DOT_SIZE, WINDOW_DOCK_DOT_SIZE / 2, dot_color, white);
+        struct framebuffer_pixel ring_color = white;
+        if (is_visible)
+        {
+            ring_color.red = 0x22;
+            ring_color.green = 0xc5;
+            ring_color.blue = 0x5e;
+        }
+        else if (dock_target_windows[i] && dock_target_shown_once[i])
+        {
+            ring_color.red = 0x9a;
+            ring_color.green = 0x9a;
+            ring_color.blue = 0x9a;
+        }
+
+        size_t ring_x = window_dock_icon_x(i) - ring_offset;
+        size_t ring_y = icon_y - ring_offset;
+        size_t t = WINDOW_DOCK_RING_THICKNESS;
+        graphics_draw_rect(dock_window->graphics, ring_x, ring_y, ring_span, t, ring_color);
+        graphics_draw_rect(dock_window->graphics, ring_x, ring_y + ring_span - t, ring_span, t, ring_color);
+        graphics_draw_rect(dock_window->graphics, ring_x, ring_y, t, ring_span, ring_color);
+        graphics_draw_rect(dock_window->graphics, ring_x + ring_span - t, ring_y, t, ring_span, ring_color);
     }
 
     window_redraw(dock_window);
@@ -328,7 +349,7 @@ void window_dock_body_clicked(struct graphics_info *graphics, size_t rel_x, size
         return;
     }
 
-    size_t icon_size = dock_icons[0]->width;
+    size_t icon_size = WINDOW_DOCK_ICON_SIZE;
     size_t icon_y = (WINDOW_DOCK_HEIGHT - icon_size) / 2;
 
     int clicked_slot = -1;
@@ -350,6 +371,11 @@ void window_dock_body_clicked(struct graphics_info *graphics, size_t rel_x, size
     }
 
     dock_click_active = true;
+
+    if (clicked_slot == WINDOW_DOCK_SLOT_RESTART)
+    {
+        system_reboot();
+    }
 
     if (dock_target_windows[clicked_slot])
     {
@@ -405,6 +431,7 @@ void window_dock_register_target_slot(int slot, struct window *target)
     }
 
     dock_target_windows[slot] = target;
+    dock_target_shown_once[slot] = false;
     window_dock_icon_redraw();
 }
 

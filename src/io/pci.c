@@ -263,9 +263,13 @@ static void pci_size_bars(uint8_t bus, uint8_t dev, uint8_t func, struct pci_dev
                 continue;
             }
 
-            uint64_t mask = (uint64_t)masked;
+            // 16-bit I/O decoders leave the upper half zero; treat it as all-ones
+            if ((masked & 0xFFFF0000u) == 0)
+            {
+                masked |= 0xFFFF0000u;
+            }
             bar->addr = (uint64_t)base;
-            bar->size = (~mask) + 1u;
+            bar->size = (uint32_t)(~masked + 1u);
         }
         else
         {
@@ -317,9 +321,9 @@ static void pci_size_bars(uint8_t bus, uint8_t dev, uint8_t func, struct pci_dev
                     bar->size = 0;
                     continue;
                 }
-                uint64_t mask = (uint64_t)masked;
+                // Invert in 32 bits: widening first turns a 4KB BAR into ~2^64 bytes
                 bar->addr = (uint64_t)base;
-                bar->size = (~mask) + 1u;
+                bar->size = (uint32_t)(~masked + 1u);
             }
         }
     }

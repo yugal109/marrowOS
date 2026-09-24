@@ -39,6 +39,9 @@ struct gui
 
     struct graphics *win_graphics;
     struct window *window;
+
+    // The kernel repeats clicks while held; only the first after a release is a press
+    bool mouse_down;
 };
 
 /**

@@ -6,6 +6,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+// Height of the dock strip along the bottom of the screen
+#define WINDOW_DOCK_HEIGHT 36
+
 enum
 {
     WINDOW_EVENT_TYPE_NULL,

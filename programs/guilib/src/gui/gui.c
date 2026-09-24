@@ -160,7 +160,19 @@ int gui_process_event_mouse_move(struct gui *gui, struct window_event *win_event
 
 int gui_process_event_mouse_click(struct gui *gui, struct window_event *win_event)
 {
+    if (gui->mouse_down)
+    {
+        return 0;
+    }
+
+    gui->mouse_down = true;
     return gui_event_push_event_mouse_click(gui, win_event->data.click.x, win_event->data.click.y, GUI_LEFT_CLICK);
+}
+
+int gui_process_event_mouse_release(struct gui *gui, struct window_event *win_event)
+{
+    gui->mouse_down = false;
+    return 0;
 }
 
 int gui_process_event_window_close(struct gui *gui, struct window_event *win_event)
@@ -205,6 +217,10 @@ int gui_process_event(struct gui *gui, struct window_event *win_event)
 
     case WINDOW_EVENT_TYPE_MOUSE_CLICK:
         res = gui_process_event_mouse_click(gui, win_event);
+        break;
+
+    case WINDOW_EVENT_TYPE_MOUSE_RELEASE:
+        res = gui_process_event_mouse_release(gui, win_event);
         break;
 
     case WINDOW_EVENT_TYPE_WINDOW_CLOSE:
