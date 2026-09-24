@@ -111,4 +111,47 @@ void marrowos_window_cursor_set(struct window *window, long rel_x, long rel_y);
 void marrowos_window_redraw_region(long rel_x, long rel_y, long rel_width, long rel_height, struct window *window);
 void marrowos_udelay(unsigned long microseconds);
 
+// Mirror the kernel's system_info / system_disk_info
+struct marrowos_system_info
+{
+    char cpu_name[64];
+    unsigned long memory_bytes;
+    unsigned long uptime_ms;
+    unsigned int disk_count;
+    unsigned int cpu_mhz;
+    unsigned int cpu_cores;
+    unsigned int cpu_threads;
+    unsigned int screen_width;
+    unsigned int screen_height;
+    // Per core for L1 and L2, shared for L3; 0 if unknown
+    unsigned int cache_l1_kb;
+    unsigned int cache_l2_kb;
+    unsigned int cache_l3_kb;
+    unsigned int year;
+    unsigned int month;
+    unsigned int day;
+    unsigned int hour;
+    unsigned int minute;
+    unsigned int second;
+    unsigned int cpu_temp_valid;
+    unsigned int cpu_temp_c;
+};
+
+struct marrowos_disk_info
+{
+    char name[48];
+    unsigned long size_bytes;
+};
+
+enum
+{
+    MARROWOS_POWER_RESTART,
+    MARROWOS_POWER_OFF
+};
+
+int marrowos_system_info(struct marrowos_system_info *info);
+int marrowos_disk_info(int index, struct marrowos_disk_info *info);
+// Restart does not return; power off returns only if the hardware ignored it
+int marrowos_power(int action);
+
 #endif

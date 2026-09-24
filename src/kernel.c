@@ -1,5 +1,4 @@
 #include "kernel.h"
-#include "io/io.h"
 #include <stddef.h>
 #include <stdint.h>
 #include "idt/idt.h"
@@ -51,51 +50,6 @@ void print(const char *str)
     for (int i = 0; i < len; i++)
     {
         terminal_writechar(str[i], 15);
-    }
-}
-
-// Reset Control register: latch the type (full), then start the reset
-#define RESET_CONTROL_PORT 0xCF9
-#define RESET_CONTROL_FULL 0x02
-#define RESET_CONTROL_START 0x04
-// 8042 keyboard controller: pulses the CPU reset line
-#define KBC_COMMAND_PORT 0x64
-#define KBC_STATUS_INPUT_FULL 0x02
-#define KBC_PULSE_RESET 0xFE
-
-void system_reboot()
-{
-    __asm__ volatile("cli");
-
-    outb(RESET_CONTROL_PORT, RESET_CONTROL_FULL);
-    outb(RESET_CONTROL_PORT, RESET_CONTROL_FULL | RESET_CONTROL_START);
-    for (volatile int i = 0; i < 1000000; i++)
-    {
-        // delay
-    }
-
-    // Chipset reset ignored: try the keyboard controller
-    for (int i = 0; i < 100000 && (insb(KBC_COMMAND_PORT) & KBC_STATUS_INPUT_FULL); i++)
-    {
-        // wait for the controller's input buffer to drain
-    }
-    outb(KBC_COMMAND_PORT, KBC_PULSE_RESET);
-    for (volatile int i = 0; i < 1000000; i++)
-    {
-        // delay
-    }
-
-    // Last resort: an interrupt with an empty IDT triple-faults the CPU
-    struct
-    {
-        uint16_t limit;
-        uint64_t base;
-    } __attribute__((packed)) empty_idt = {0, 0};
-    __asm__ volatile("lidt %0; int3" ::"m"(empty_idt));
-
-    while (1)
-    {
-        __asm__ volatile("hlt");
     }
 }
 
@@ -269,6 +223,8 @@ void kernel_preload_dock_app(const char *path, int dock_slot)
 extern struct graphics_info default_graphics_info;
 void kernel_main()
 {
+    tsc_boot_mark();
+
     struct graphics_info *screen_info = NULL;
 
     print("Hello 64-bit!\n");
@@ -447,6 +403,7 @@ void kernel_main()
     }
     kernel_boot_progress_draw(screen_info, 90);
 
+    kernel_preload_dock_app("@:/settings.elf", 1);
     kernel_preload_dock_app("@:/editor.elf", 2);
     kernel_preload_dock_app("@:/calc.elf", 3);
     kernel_preload_dock_app("@:/draw.elf", 5);

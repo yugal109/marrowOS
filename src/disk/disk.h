@@ -44,6 +44,10 @@ struct disk
 
     // private data known by the disk driver in relation to the disk
     void *driver_private;
+
+    // Filled by the driver when the device reports them
+    char model[41];
+    uint64_t size_bytes;
 };
 
 struct disk *disk_hardware_disk(struct disk *disk);
@@ -54,6 +58,9 @@ void *disk_private_data_driver(struct disk *disk);
 void disk_search_and_init();
 size_t disk_total();
 struct disk *disk_get(int index);
+void disk_info_set(struct disk *disk, const char *model, size_t model_len, uint64_t size_bytes);
+int disk_real_total();
+struct disk *disk_real_get(int index);
 int disk_read_block(struct disk *idisk, unsigned int lba, int total, void *buf);
 struct disk *disk_primary_fs_disk();
 struct disk *disk_primary();

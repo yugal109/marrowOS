@@ -86,6 +86,51 @@ static int nvme_admin_cmd_raw(struct disk *disk, uint8_t opcode, uint32_t nsid, 
     return (status == 0u) ? 0 : -EIO;
 }
 
+#define NVME_ADMIN_IDENTIFY 0x06
+#define NVME_IDENTIFY_CNS_NAMESPACE 0
+#define NVME_IDENTIFY_CNS_CONTROLLER 1
+#define NVME_IDENTIFY_PAGE 4096
+
+// Best effort: a failed identify just leaves the disk without a name or size
+static void nvme_disk_identify(struct disk *disk)
+{
+    struct nvme_disk_driver_private *p = disk_private_data_driver(disk);
+    uint8_t *raw = kzalloc(NVME_IDENTIFY_PAGE * 2);
+    if (!raw)
+    {
+        return;
+    }
+
+    // The data buffer must be page aligned
+    uint8_t *data = (uint8_t *)(((uintptr_t)raw + NVME_IDENTIFY_PAGE - 1) & ~(uintptr_t)(NVME_IDENTIFY_PAGE - 1));
+
+    char model[40] = {0};
+    uint64_t size_bytes = 0;
+
+    // Controller: model number at bytes 24-63
+    if (nvme_admin_cmd_raw(disk, NVME_ADMIN_IDENTIFY, 0, (uint64_t)(uintptr_t)data, NVME_IDENTIFY_CNS_CONTROLLER, 0) == 0)
+    {
+        memcpy(model, data + 24, sizeof(model));
+    }
+
+    // Namespace: size in blocks at byte 0, block size from the active LBA format
+    memset(data, 0, NVME_IDENTIFY_PAGE);
+    if (nvme_admin_cmd_raw(disk, NVME_ADMIN_IDENTIFY, p->nsid, (uint64_t)(uintptr_t)data, NVME_IDENTIFY_CNS_NAMESPACE, 0) == 0)
+    {
+        uint64_t blocks = 0;
+        memcpy(&blocks, data, sizeof(blocks));
+        uint8_t format = data[26] & 0x0F;
+        uint8_t block_size_log2 = data[128 + format * 4 + 2];
+        if (block_size_log2 >= 9 && block_size_log2 <= 16)
+        {
+            size_bytes = blocks << block_size_log2;
+        }
+    }
+
+    disk_info_set(disk, model, sizeof(model), size_bytes);
+    kfree(raw);
+}
+
 static int nvme_create_io_cq(struct disk *disk, uint16_t qid, uint16_t qsize, void *cq_virt)
 {
     uint32_t cdw10 = ((uint32_t)(qsize - 1) << 16) | qid;
@@ -383,6 +428,7 @@ static int nvme_disk_driver_mount_for_device(struct disk_driver *driver, struct 
         return res;
     }
 
+    nvme_disk_identify(disk);
     return 0;
 }
 

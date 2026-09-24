@@ -167,6 +167,8 @@ int process_fclose(struct process *process, int fd);
 int process_fread(struct process *process, void *virt_ptr, uint64_t size, uint64_t nmemb, int fd);
 int process_fseek(struct process *process, int fd, int offset, FILE_SEEK_MODE whence);
 int process_fstat(struct process *process, int fd, struct file_stat *virt_filestat_addr);
+void *process_virtual_address_to_physical(struct process *process, void *virt_addr);
+int process_validate_memory_or_terminate(struct process *process, void *virt_addr, size_t space_needed);
 void *process_realloc(struct process *process, void *old_virt_ptr, size_t new_size);
 struct process_window *process_window_create(struct process *process, char *title, int width, int height, int flags, int id);
 bool process_owns_kernel_window(struct process *process, struct window *kernel_window);

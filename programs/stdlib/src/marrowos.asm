@@ -28,6 +28,9 @@ global marrowos_window_redraw_region: function
 global marrowos_window_title_set:function
 global marrowos_window_cursor_set:function
 global marrowos_udelay:function
+global marrowos_system_info:function
+global marrowos_disk_info:function
+global marrowos_power:function
 
 
 ; void print(const char* message)
@@ -264,4 +267,29 @@ marrowos_udelay:
     push qword rdi ; microseconds
     int 0x80
     add rsp, 8 ; restore the stack
+    ret
+
+; int marrowos_system_info(struct marrowos_system_info* info)
+marrowos_system_info:
+    mov rax, 26 ; command 26 system info
+    push qword rdi ; info
+    int 0x80
+    add rsp, 8
+    ret
+
+; int marrowos_disk_info(int index, struct marrowos_disk_info* info)
+marrowos_disk_info:
+    mov rax, 27 ; command 27 disk info
+    push qword rsi ; info
+    push qword rdi ; index
+    int 0x80
+    add rsp, 16
+    ret
+
+; int marrowos_power(int action)
+marrowos_power:
+    mov rax, 28 ; command 28 power
+    push qword rdi ; action
+    int 0x80
+    add rsp, 8
     ret

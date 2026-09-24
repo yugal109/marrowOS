@@ -165,6 +165,54 @@ struct disk *disk_get(int index)
     return disk;
 }
 
+// Stores a device's model string, trimmed and printable, and its size
+void disk_info_set(struct disk *disk, const char *model, size_t model_len, uint64_t size_bytes)
+{
+    size_t len = model_len < sizeof(disk->model) - 1 ? model_len : sizeof(disk->model) - 1;
+    for (size_t i = 0; i < len; i++)
+    {
+        char c = model[i];
+        disk->model[i] = (c >= 0x20 && c < 0x7F) ? c : ' ';
+    }
+    disk->model[len] = 0;
+
+    while (len > 0 && disk->model[len - 1] == ' ')
+    {
+        disk->model[--len] = 0;
+    }
+
+    disk->size_bytes = size_bytes;
+}
+
+// Whole devices only, not the partitions on them
+int disk_real_total()
+{
+    int total = 0;
+    for (size_t i = 0; i < disk_total(); i++)
+    {
+        struct disk *d = disk_get(i);
+        if (d && d->type == MARROWOS_DISK_TYPE_REAL)
+        {
+            total++;
+        }
+    }
+    return total;
+}
+
+struct disk *disk_real_get(int index)
+{
+    int seen = 0;
+    for (size_t i = 0; i < disk_total(); i++)
+    {
+        struct disk *d = disk_get(i);
+        if (d && d->type == MARROWOS_DISK_TYPE_REAL && seen++ == index)
+        {
+            return d;
+        }
+    }
+    return NULL;
+}
+
 int disk_read_block(struct disk *idisk, unsigned int lba, int total, void *buf)
 {
     size_t absolute_lba = idisk->starting_lba + lba;

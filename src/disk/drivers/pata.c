@@ -88,7 +88,7 @@ static int ata_wait_drq(uint16_t io_base, int timeout)
     return -EIO;
 }
 
-static int ata_identify(uint16_t io_base, uint16_t ctrl_base, uint8_t drive_select)
+static int ata_identify(uint16_t io_base, uint16_t ctrl_base, uint8_t drive_select, uint16_t *identify_out)
 {
     outb(io_base + ATA_REG_DRIVE, drive_select);
     ata_io_delay(ctrl_base);
@@ -122,10 +122,10 @@ static int ata_identify(uint16_t io_base, uint16_t ctrl_base, uint8_t drive_sele
         return -EIO;
     }
 
-    // Drain identify block so drive isn't left mid-transfer
+    // Reading the whole block also leaves the drive out of the transfer
     for (int i = 0; i < 256; i++)
     {
-        insw(io_base + ATA_REG_DATA);
+        identify_out[i] = insw(io_base + ATA_REG_DATA);
     }
 
     return MARROWOS_ALL_OK;
@@ -176,6 +176,27 @@ static uint32_t pci_config_read32(uint8_t bus, uint8_t slot, uint8_t func, uint8
     return insdw(PCI_CONFIG_DATA);
 }
 
+// Identify block: model in words 27-46 (high byte first), size in words 60-61,
+// or 100-103 when the drive supports 48-bit LBA (word 83 bit 10)
+static void pata_disk_info_set(struct disk *disk, const uint16_t *identify)
+{
+    char model[40];
+    for (int i = 0; i < 20; i++)
+    {
+        model[i * 2] = (char)(identify[27 + i] >> 8);
+        model[i * 2 + 1] = (char)(identify[27 + i] & 0xFF);
+    }
+
+    uint64_t sectors = (uint64_t)identify[60] | ((uint64_t)identify[61] << 16);
+    if (identify[83] & (1u << 10))
+    {
+        sectors = (uint64_t)identify[100] | ((uint64_t)identify[101] << 16) |
+                  ((uint64_t)identify[102] << 32) | ((uint64_t)identify[103] << 48);
+    }
+
+    disk_info_set(disk, model, sizeof(model), sectors * PATA_SECTOR_SIZE);
+}
+
 static void pata_probe_channel(struct disk_driver *driver, uint16_t io_base, uint16_t ctrl_base)
 {
     outb(ctrl_base, ATA_CTRL_NIEN);
@@ -183,7 +204,8 @@ static void pata_probe_channel(struct disk_driver *driver, uint16_t io_base, uin
     uint8_t drives[2] = {ATA_DRIVE_MASTER, ATA_DRIVE_SLAVE};
     for (int d = 0; d < 2; d++)
     {
-        if (ata_identify(io_base, ctrl_base, drives[d]) != MARROWOS_ALL_OK)
+        uint16_t identify[256];
+        if (ata_identify(io_base, ctrl_base, drives[d], identify) != MARROWOS_ALL_OK)
         {
             continue;
         }
@@ -201,6 +223,10 @@ static void pata_probe_channel(struct disk_driver *driver, uint16_t io_base, uin
         if (disk_create_new(driver, NULL, MARROWOS_DISK_TYPE_REAL, 0, 0, PATA_SECTOR_SIZE, private_data, &found) < 0)
         {
             kfree(private_data);
+        }
+        else
+        {
+            pata_disk_info_set(found, identify);
         }
     }
 }

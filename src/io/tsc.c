@@ -88,6 +88,18 @@ TIME_MILISECONDS tsc_miliseconds()
     return microseconds / 1000;
 }
 
+static TIME_MILISECONDS boot_miliseconds = 0;
+
+void tsc_boot_mark(void)
+{
+    boot_miliseconds = tsc_miliseconds();
+}
+
+TIME_MILISECONDS tsc_uptime_miliseconds(void)
+{
+    return tsc_miliseconds() - boot_miliseconds;
+}
+
 TIME_SECONDS tsc_seconds()
 {
     TIME_MILISECONDS miliseconds = tsc_miliseconds();

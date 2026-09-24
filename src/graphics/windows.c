@@ -229,8 +229,6 @@ void window_show(struct window *window)
 #define WINDOW_DOCK_RING_GAP 1
 #define WINDOW_DOCK_ZINDEX 200000
 #define WINDOW_DOCK_TOTAL_ICONS 6
-// Settings icon restarts the machine for now
-#define WINDOW_DOCK_SLOT_RESTART 1
 
 // PS/2 fires click on every packet while held, so latch to act once.
 static bool dock_click_active = false;
@@ -252,7 +250,7 @@ static const char *dock_icon_paths[WINDOW_DOCK_TOTAL_ICONS] = {
 // ELF each icon launches on first click; NULL means the icon does nothing yet.
 static const char *dock_program_paths[WINDOW_DOCK_TOTAL_ICONS] = {
     NULL,
-    NULL,
+    "@:/settings.elf",
     "@:/editor.elf",
     "@:/calc.elf",
     NULL,
@@ -371,11 +369,6 @@ void window_dock_body_clicked(struct graphics_info *graphics, size_t rel_x, size
     }
 
     dock_click_active = true;
-
-    if (clicked_slot == WINDOW_DOCK_SLOT_RESTART)
-    {
-        system_reboot();
-    }
 
     if (dock_target_windows[clicked_slot])
     {
