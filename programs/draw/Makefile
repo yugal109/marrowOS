@@ -1,5 +1,5 @@
 BUILD_DIR=./build
-FILES=$(BUILD_DIR)/draw.o $(BUILD_DIR)/print.o
+FILES=$(BUILD_DIR)/draw.o $(BUILD_DIR)/print.o $(BUILD_DIR)/demo.o
 INCLUDES=-I../stdlib/src -I../guilib/src -I../containerlib/src
 FLAGS= -g -ffreestanding -falign-jumps -falign-functions -falign-labels -falign-loops -fstrength-reduce -fomit-frame-pointer -finline-functions -Wno-unused-function -fno-builtin -Werror -Wno-unused-label -Wno-cpp -Wno-unused-parameter -nostdlib -nostartfiles -nodefaultlibs -Wall -O0 -Iinc
 .PHONY: all clean
@@ -13,7 +13,11 @@ $(BUILD_DIR)/print.o: ./print.c ./print.h
 	mkdir -p $(BUILD_DIR)
 	x86_64-elf-gcc ${INCLUDES} -I./ $(FLAGS) -std=gnu99 -c ./print.c -o $(BUILD_DIR)/print.o
 
-$(BUILD_DIR)/draw.o: ./draw.c ./print.h
+$(BUILD_DIR)/demo.o: ./demo.c ./demo.h
+	mkdir -p $(BUILD_DIR)
+	x86_64-elf-gcc ${INCLUDES} -I./ $(FLAGS) -std=gnu99 -c ./demo.c -o $(BUILD_DIR)/demo.o
+
+$(BUILD_DIR)/draw.o: ./draw.c ./print.h ./demo.h
 	mkdir -p $(BUILD_DIR)
 	x86_64-elf-gcc ${INCLUDES} -I./ $(FLAGS) -std=gnu99 -c ./draw.c -o $(BUILD_DIR)/draw.o
 

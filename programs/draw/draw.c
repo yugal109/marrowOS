@@ -7,6 +7,7 @@
 #include "font.h"
 #include "string.h"
 #include "print.h"
+#include "demo.h"
 
 // The eraser is wider so it clears a useful area, not one pen stroke
 #define DRAW_BRUSH_SIZE 3
@@ -21,6 +22,7 @@
 #define TOOLBAR_RING 2
 #define TOOLBAR_TOTAL_BTNS 7
 #define TOOLBAR_PRINT_WIDTH 56
+#define TOOLBAR_DEMO_WIDTH 56
 #define PRINT_STATUS_MAX 40
 #define FONT_HEIGHT 16
 
@@ -38,6 +40,8 @@ enum
     TOOLBAR_BTN_CLEAR,
     // Not a swatch: sits at the right end of the toolbar
     TOOLBAR_BTN_PRINT,
+    // Sits just left of Print
+    TOOLBAR_BTN_DEMO,
 };
 
 struct framebuffer_pixel color_white = {.red = 0xff, .green = 0xff, .blue = 0xff, .reserved = 0};
@@ -69,6 +73,11 @@ int toolbar_print_x(int window_width)
     return window_width - TOOLBAR_PRINT_WIDTH - TOOLBAR_MARGIN;
 }
 
+int toolbar_demo_x(int window_width)
+{
+    return toolbar_print_x(window_width) - TOOLBAR_BTN_GAP - TOOLBAR_DEMO_WIDTH;
+}
+
 // -1 if the click missed every button, margins included
 int toolbar_hit_test(int x, int y, int window_width)
 {
@@ -91,6 +100,12 @@ int toolbar_hit_test(int x, int y, int window_width)
     if (x >= print_x && x < print_x + TOOLBAR_PRINT_WIDTH)
     {
         return TOOLBAR_BTN_PRINT;
+    }
+
+    int demo_x = toolbar_demo_x(window_width);
+    if (x >= demo_x && x < demo_x + TOOLBAR_DEMO_WIDTH)
+    {
+        return TOOLBAR_BTN_DEMO;
     }
 
     return -1;
@@ -182,26 +197,33 @@ void draw_line(struct graphics *canvas, int x0, int y0, int x1, int y1, int brus
     }
 }
 
-// Progress and result of the last Print, shown left of the Print button
+// Progress and result of the last Print, shown left of the Demo button
 static char print_status[PRINT_STATUS_MAX];
+
+void toolbar_text_button(struct graphics *canvas, int x, int width, const char *label)
+{
+    int y = toolbar_btn_y();
+    struct framebuffer_pixel fill = {.red = 0xc8, .green = 0xdc, .blue = 0xf0, .reserved = 0};
+    graphics_draw_rect(canvas, x, y, width, TOOLBAR_BTN_SIZE, fill);
+    graphics_draw_rect(canvas, x, y, width, 2, toolbar_border);
+    graphics_draw_rect(canvas, x, y + TOOLBAR_BTN_SIZE - 2, width, 2, toolbar_border);
+    graphics_draw_rect(canvas, x, y, 2, TOOLBAR_BTN_SIZE, toolbar_border);
+    graphics_draw_rect(canvas, x + width - 2, y, 2, TOOLBAR_BTN_SIZE, toolbar_border);
+
+    struct font *font = font_get_system_font();
+    font_draw_text(canvas, font, x + 5, y + (TOOLBAR_BTN_SIZE - FONT_HEIGHT) / 2, label, toolbar_border);
+}
 
 void toolbar_print_draw(struct graphics *canvas, int window_width)
 {
-    int x = toolbar_print_x(window_width);
-    int y = toolbar_btn_y();
-    struct framebuffer_pixel fill = {.red = 0xc8, .green = 0xdc, .blue = 0xf0, .reserved = 0};
-    graphics_draw_rect(canvas, x, y, TOOLBAR_PRINT_WIDTH, TOOLBAR_BTN_SIZE, fill);
-    graphics_draw_rect(canvas, x, y, TOOLBAR_PRINT_WIDTH, 2, toolbar_border);
-    graphics_draw_rect(canvas, x, y + TOOLBAR_BTN_SIZE - 2, TOOLBAR_PRINT_WIDTH, 2, toolbar_border);
-    graphics_draw_rect(canvas, x, y, 2, TOOLBAR_BTN_SIZE, toolbar_border);
-    graphics_draw_rect(canvas, x + TOOLBAR_PRINT_WIDTH - 2, y, 2, TOOLBAR_BTN_SIZE, toolbar_border);
-
-    struct font *font = font_get_system_font();
-    font_draw_text(canvas, font, x + 5, y + (TOOLBAR_BTN_SIZE - FONT_HEIGHT) / 2, "Print", toolbar_border);
+    int demo_x = toolbar_demo_x(window_width);
+    toolbar_text_button(canvas, toolbar_print_x(window_width), TOOLBAR_PRINT_WIDTH, "Print");
+    toolbar_text_button(canvas, demo_x, TOOLBAR_DEMO_WIDTH, "Demo");
 
     int status_x = toolbar_btn_x(TOOLBAR_TOTAL_BTNS) + 4;
-    if (print_status[0] && status_x < x)
+    if (print_status[0] && status_x < demo_x)
     {
+        struct font *font = font_get_system_font();
         font_draw_text(canvas, font, status_x, (TOOLBAR_HEIGHT - FONT_HEIGHT) / 2, print_status, toolbar_border);
     }
 }
@@ -385,6 +407,30 @@ int main(int argc, char **argv)
                         print_start(main_win, canvas, current_color);
                         break;
 
+                    case TOOLBAR_BTN_DEMO:
+                    {
+                        // The whole scene is one undoable action
+                        int pixel_count = canvas->width * canvas->height;
+                        if (undo_width != canvas->width || undo_height != canvas->height)
+                        {
+                            free(undo_buffer);
+                            undo_buffer = malloc(pixel_count * sizeof(struct framebuffer_pixel));
+                            undo_width = canvas->width;
+                            undo_height = canvas->height;
+                        }
+                        if (undo_buffer)
+                        {
+                            memcpy(undo_buffer, canvas->pixels, pixel_count * sizeof(struct framebuffer_pixel));
+                            undo_available = true;
+                        }
+
+                        graphics_draw_rect(canvas, 0, TOOLBAR_HEIGHT, main_win->width, main_win->height - TOOLBAR_HEIGHT, color_white);
+                        demo_draw_scene(canvas, CANVAS_MARGIN, TOOLBAR_HEIGHT + CANVAS_MARGIN,
+                                        main_win->width - CANVAS_MARGIN * 2,
+                                        main_win->height - TOOLBAR_HEIGHT - CANVAS_MARGIN * 2);
+                        break;
+                    }
+
                     case TOOLBAR_BTN_BLACK:
                         current_color = color_ink;
                         current_brush = DRAW_BRUSH_SIZE;
@@ -428,7 +474,7 @@ int main(int argc, char **argv)
 
                     toolbar_draw(canvas, main_win->width, current_color);
                     window_redraw_region(main_win, 0, 0, main_win->width, TOOLBAR_HEIGHT);
-                    if (hit == TOOLBAR_BTN_UNDO || hit == TOOLBAR_BTN_CLEAR)
+                    if (hit == TOOLBAR_BTN_UNDO || hit == TOOLBAR_BTN_CLEAR || hit == TOOLBAR_BTN_DEMO)
                     {
                         window_redraw_region(main_win, 0, TOOLBAR_HEIGHT, main_win->width, main_win->height - TOOLBAR_HEIGHT);
                     }

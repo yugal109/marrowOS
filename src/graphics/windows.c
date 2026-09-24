@@ -228,6 +228,13 @@ void window_show(struct window *window)
 #define WINDOW_DOCK_RING_THICKNESS 2
 #define WINDOW_DOCK_RING_GAP 1
 #define WINDOW_DOCK_ZINDEX 200000
+// Dark dock. White stays the icons' "ignored" background, so it shows this colour through
+#define WINDOW_DOCK_BG_RED 0x36
+#define WINDOW_DOCK_BG_GREEN 0x38
+#define WINDOW_DOCK_BG_BLUE 0x42
+#define WINDOW_DOCK_TOP_LINE_RED 0x58
+#define WINDOW_DOCK_TOP_LINE_GREEN 0x5a
+#define WINDOW_DOCK_TOP_LINE_BLUE 0x68
 #define WINDOW_DOCK_TOTAL_ICONS 6
 
 // PS/2 fires click on every packet while held, so latch to act once.
@@ -287,7 +294,7 @@ void window_dock_icon_redraw()
     }
     terminal_ignore_color_finish(dock_window->terminal);
 
-    // Green: on screen. Grey: shown once, now hidden. White: none (also erases).
+    // Green: on screen. Grey: shown once, now hidden. Dock colour: none (also erases).
     size_t ring_offset = WINDOW_DOCK_RING_THICKNESS + WINDOW_DOCK_RING_GAP;
     size_t ring_span = icon_size + (ring_offset * 2);
     for (int i = 0; i < WINDOW_DOCK_TOTAL_ICONS; i++)
@@ -303,7 +310,10 @@ void window_dock_icon_redraw()
             dock_target_shown_once[i] = true;
         }
 
-        struct framebuffer_pixel ring_color = white;
+        struct framebuffer_pixel ring_color = {0};
+        ring_color.red = WINDOW_DOCK_BG_RED;
+        ring_color.green = WINDOW_DOCK_BG_GREEN;
+        ring_color.blue = WINDOW_DOCK_BG_BLUE;
         if (is_visible)
         {
             ring_color.red = 0x22;
@@ -409,6 +419,19 @@ void window_dock_initialize()
     {
         dock_icons[i] = graphics_image_load(dock_icon_paths[i]);
     }
+
+    // window_create() fills every body white; repaint the dock dark, with a light line on its top edge
+    struct framebuffer_pixel dock_bg = {0};
+    dock_bg.red = WINDOW_DOCK_BG_RED;
+    dock_bg.green = WINDOW_DOCK_BG_GREEN;
+    dock_bg.blue = WINDOW_DOCK_BG_BLUE;
+    struct framebuffer_pixel dock_top_line = {0};
+    dock_top_line.red = WINDOW_DOCK_TOP_LINE_RED;
+    dock_top_line.green = WINDOW_DOCK_TOP_LINE_GREEN;
+    dock_top_line.blue = WINDOW_DOCK_TOP_LINE_BLUE;
+    terminal_draw_rect(dock_window->terminal, 0, 0, dock_window->width, dock_window->height, dock_bg);
+    terminal_draw_rect(dock_window->terminal, 0, 0, dock_window->width, 1, dock_top_line);
+    terminal_background_save(dock_window->terminal);
 
     window_set_z_index(dock_window, WINDOW_DOCK_ZINDEX);
     graphics_click_handler_set(dock_window->graphics, window_dock_body_clicked);

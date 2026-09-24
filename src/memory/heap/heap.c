@@ -205,8 +205,9 @@ void heap_mark_blocks_taken(struct heap *heap, int64_t start_block, int64_t tota
     for (int64_t i = start_block; i <= end_block; i++)
     {
         heap->table->entries[i] = entry;
+        // This is the entry for block i + 1, so only it being the last block ends the chain
         entry = HEAP_BLOCK_TABLE_ENTRY_TAKEN;
-        if (i != end_block)
+        if (i + 1 != end_block)
         {
             entry |= HEAP_BLOCK_HAS_NEXT;
         }
