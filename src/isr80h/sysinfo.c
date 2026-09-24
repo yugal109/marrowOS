@@ -6,6 +6,7 @@
 #include "io/power.h"
 #include "io/tsc.h"
 #include "io/rtc.h"
+#include "usb/ehci.h"
 #include "graphics/graphics.h"
 #include "memory/memory.h"
 #include "status.h"
@@ -286,6 +287,8 @@ void *isr80h_command26_system_info(struct interrupt_frame *frame)
     info.uptime_ms = tsc_uptime_miliseconds();
     system_cpu_cache(&info.cache_l1_kb, &info.cache_l2_kb, &info.cache_l3_kb);
     info.cpu_temp_valid = system_cpu_temperature(&info.cpu_temp_c) ? 1 : 0;
+    info.serial_state = (uint32_t)ehci_serial_state();
+    info.serial_baud = ehci_serial_baud();
 
     uint64_t now_ms = tsc_miliseconds();
     if (!rtc_cached || now_ms - rtc_cache_read_ms >= RTC_CACHE_MS)

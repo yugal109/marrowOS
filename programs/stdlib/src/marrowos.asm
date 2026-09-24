@@ -31,6 +31,7 @@ global marrowos_udelay:function
 global marrowos_system_info:function
 global marrowos_disk_info:function
 global marrowos_power:function
+global marrowos_serial_write:function
 
 
 ; void print(const char* message)
@@ -292,4 +293,13 @@ marrowos_power:
     push qword rdi ; action
     int 0x80
     add rsp, 8
+    ret
+
+; int marrowos_serial_write(const void* data, unsigned long length)
+marrowos_serial_write:
+    mov rax, 29 ; command 29 serial write
+    push qword rsi ; length
+    push qword rdi ; data
+    int 0x80
+    add rsp, 16
     ret

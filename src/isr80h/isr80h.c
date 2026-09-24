@@ -9,6 +9,7 @@
 #include "window.h"
 #include "time.h"
 #include "sysinfo.h"
+#include "serial.h"
 
 void isr80h_register_commands()
 {
@@ -41,4 +42,5 @@ void isr80h_register_commands()
     isr80h_register_command(SYSTEM_COMMAND26_SYSTEM_INFO, isr80h_command26_system_info);
     isr80h_register_command(SYSTEM_COMMAND27_DISK_INFO, isr80h_command27_disk_info);
     isr80h_register_command(SYSTEM_COMMAND28_POWER, isr80h_command28_power);
+    isr80h_register_command(SYSTEM_COMMAND29_SERIAL_WRITE, isr80h_command29_serial_write);
 }

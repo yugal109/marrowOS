@@ -28,6 +28,9 @@ struct system_info
     // Core temperature; valid only where the chip and platform allow reading it
     uint32_t cpu_temp_valid;
     uint32_t cpu_temp_c;
+    // EHCI_SERIAL_NONE / READY / FAILED, and the speed it was set to
+    uint32_t serial_state;
+    uint32_t serial_baud;
 };
 
 struct system_disk_info

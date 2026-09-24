@@ -205,8 +205,8 @@ int main(int argc, char **argv)
 
     bool has_temp = info.cpu_temp_valid != 0;
 
-    // Processor (3, +cache, +temperature), OS, clock, memory, screen, uptime, storage caption, disks, optional "more"
-    int rows = 9 + (has_cache ? 1 : 0) + (has_temp ? 1 : 0) + shown_disks + (more_disks ? 1 : 0);
+    // Processor (3, +cache, +temperature), OS, clock, memory, screen, uptime, serial, storage caption, disks, optional "more"
+    int rows = 10 + (has_cache ? 1 : 0) + (has_temp ? 1 : 0) + shown_disks + (more_disks ? 1 : 0);
     int height = PADDING + rows * ROW_PITCH + PADDING + BUTTON_HEIGHT + PADDING + ROW_HEIGHT + PADDING;
 
     struct window *main_win = window_create("Settings", WINDOW_WIDTH, height, 0, 558);
@@ -270,6 +270,17 @@ int main(int argc, char **argv)
 
     uptime_format(line, info.uptime_ms);
     uptime_field = row_create(gui, y, width, UPTIME_ID, line, false);
+    y += ROW_PITCH;
+
+    if (info.serial_state == 1)
+    {
+        sprintf(line, "Serial: adapter ready, %i baud", (int)info.serial_baud);
+    }
+    else
+    {
+        sprintf(line, "Serial: %s", info.serial_state == 2 ? "adapter error" : "no adapter found");
+    }
+    row_create(gui, y, width, id++, line, false);
     y += ROW_PITCH;
 
     sprintf(line, "Storage devices: %i", (int)info.disk_count);

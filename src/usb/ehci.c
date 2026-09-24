@@ -9,6 +9,7 @@
 #include "keyboard/usbhid.h"
 #include "mouse/usbhid_mouse.h"
 #include "hidreport.h"
+#include "status.h"
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -116,6 +117,16 @@
 #define USB_DESC_HID 0x21
 #define USB_DESC_HID_REPORT 0x22
 #define USB_CLASS_HID 3
+#define USB_CLASS_CDC_COMM 2
+#define USB_CLASS_CDC_DATA 10
+#define CDC_SUBCLASS_ACM 2
+#define USB_EP_TYPE_MASK 0x3
+#define USB_EP_TYPE_BULK 2
+#define CDC_REQ_SET_LINE_CODING 0x20
+#define CDC_REQ_SET_CONTROL_LINE_STATE 0x22
+#define CDC_LINE_STATE_DTR_RTS 0x03
+#define EHCI_SERIAL_BAUD 115200
+#define EHCI_SERIAL_TIMEOUT_MS 2000
 #define USB_CLASS_HUB 9
 #define HID_SUBCLASS_BOOT 1
 #define HID_PROTOCOL_KEYBOARD 1
@@ -207,6 +218,26 @@ struct ehci_hid_ep_info
     bool boot_capable;
 };
 
+struct ehci_serial_ep_info
+{
+    bool found;
+    uint8_t out_ep;
+    uint16_t out_max_packet;
+    // Interface that takes the line coding request
+    uint8_t control_interface;
+};
+
+// One serial adapter: a bulk OUT queue head that stays linked in the async schedule
+struct ehci_serial_device
+{
+    bool ready;
+    bool failed;
+    struct ehci_qh *qh;
+    struct ehci_qtd *qtd;
+    uint8_t *buffer;
+};
+
+static struct ehci_serial_device g_ehci_serial;
 static struct ehci_controller g_ehci[EHCI_MAX_CONTROLLERS];
 static int g_ehci_count = 0;
 static struct ehci_hid_device g_ehci_hid[EHCI_MAX_HID_DEVICES];
@@ -636,9 +667,108 @@ void ehci_poll_hid_devices()
     }
 }
 
-// Finds the first interrupt IN endpoint of a keyboard/mouse interface, and whether it's a hub
-static void ehci_walk_config(uint8_t *cfg, uint16_t total_len, struct ehci_hid_ep_info *kbd, struct ehci_hid_ep_info *mouse, bool *is_hub)
+int ehci_serial_state()
 {
+    if (g_ehci_serial.failed)
+    {
+        return EHCI_SERIAL_FAILED;
+    }
+    return g_ehci_serial.ready ? EHCI_SERIAL_READY : EHCI_SERIAL_NONE;
+}
+
+uint32_t ehci_serial_baud()
+{
+    return EHCI_SERIAL_BAUD;
+}
+
+int ehci_serial_write(const void *data, size_t len)
+{
+    struct ehci_serial_device *s = &g_ehci_serial;
+    if (!s->ready || s->failed)
+    {
+        return -EIO;
+    }
+
+    if (len > EHCI_SERIAL_CHUNK)
+    {
+        len = EHCI_SERIAL_CHUNK;
+    }
+    if (len == 0)
+    {
+        return 0;
+    }
+
+    memcpy(s->buffer, (void *)data, len);
+
+    // The queue head keeps the data toggle between transfers, so only the qTD is rewritten
+    struct ehci_qtd *qtd = s->qtd;
+    qtd->next = EHCI_PTR_TERMINATE;
+    qtd->alt_next = EHCI_PTR_TERMINATE;
+    ehci_fill_buffers(qtd->buffer, qtd->buffer_hi, s->buffer, len);
+    qtd->token = EHCI_QTD_TOKEN(EHCI_QTD_PID_OUT, len, 0, 1);
+    __asm__ volatile("" ::: "memory");
+    s->qh->next_qtd = ehci_ptr(qtd);
+
+    // A busy adapter NAKs until its UART drains, and the controller keeps retrying
+    for (uint32_t i = 0; i < EHCI_SERIAL_TIMEOUT_MS * 10; i++)
+    {
+        uint32_t token = qtd->token;
+        if (token & EHCI_QTD_STATUS_HALTED)
+        {
+            s->failed = true;
+            return -EIO;
+        }
+        if (!(token & EHCI_QTD_STATUS_ACTIVE))
+        {
+            return (int)len;
+        }
+        udelay(100);
+    }
+
+    s->failed = true;
+    return -ETIMEOUT;
+}
+
+// Sets the baud rate, then puts the bulk OUT endpoint on the async schedule
+static void ehci_serial_setup(struct ehci_controller *hc, uint8_t address, const struct ehci_device_path *path,
+                              uint16_t ep0_max_packet, const struct ehci_serial_ep_info *ep)
+{
+    if (g_ehci_serial.ready)
+    {
+        return;
+    }
+
+    // CDC line coding: baud (little endian), 1 stop bit, no parity, 8 data bits
+    uint32_t baud = EHCI_SERIAL_BAUD;
+    uint8_t coding[7] = {baud & 0xFF, (baud >> 8) & 0xFF, (baud >> 16) & 0xFF, (baud >> 24) & 0xFF, 0, 0, 8};
+    ehci_control_transfer(hc, address, path, ep0_max_packet, 0x21, CDC_REQ_SET_LINE_CODING, 0, ep->control_interface, sizeof(coding), coding);
+    ehci_control_transfer(hc, address, path, ep0_max_packet, 0x21, CDC_REQ_SET_CONTROL_LINE_STATE, CDC_LINE_STATE_DTR_RTS, ep->control_interface, 0, NULL);
+    udelay(20000);
+
+    struct ehci_serial_device *s = &g_ehci_serial;
+    s->qh = ehci_qh_new();
+    s->qtd = ehci_qtd_new();
+    s->buffer = ehci_dma_alloc(EHCI_SERIAL_CHUNK, 4096);
+    s->qh->ep_char = ehci_qh_ep_char(address, ep->out_ep, path, ep->out_max_packet, false);
+    s->qh->ep_caps = ehci_qh_ep_caps(path, 0, 0);
+    s->qh->token = 0;
+
+    // Link in after the head and leave it there; control transfers link around it
+    s->qh->horiz = hc->async_head->horiz;
+    __asm__ volatile("" ::: "memory");
+    hc->async_head->horiz = ehci_ptr(s->qh) | EHCI_PTR_TYPE_QH;
+    s->ready = true;
+
+    // Shows up in the ESP32's serial monitor, so the link can be checked with no app
+    static const char hello[] = "MarrowOS serial ready\r\n";
+    ehci_serial_write(hello, sizeof(hello) - 1);
+}
+
+// Finds the first interrupt IN endpoint of a keyboard/mouse interface, and whether it's a hub
+static void ehci_walk_config(uint8_t *cfg, uint16_t total_len, struct ehci_hid_ep_info *kbd, struct ehci_hid_ep_info *mouse,
+                             struct ehci_serial_ep_info *serial, bool *is_hub)
+{
+    bool in_cdc_data = false;
     // Don't require the boot subclass: TinyUSB devices declare 0/0
     bool in_hid = false;
     bool hid_boot = false;
@@ -663,6 +793,11 @@ static void ehci_walk_config(uint8_t *cfg, uint16_t total_len, struct ehci_hid_e
                 *is_hub = true;
             }
 
+            if (cls == USB_CLASS_CDC_COMM && sub == CDC_SUBCLASS_ACM)
+            {
+                serial->control_interface = interface_number;
+            }
+            in_cdc_data = (cls == USB_CLASS_CDC_DATA);
         }
         else if (type == USB_DESC_HID && off + 9 <= total_len)
         {
@@ -671,6 +806,13 @@ static void ehci_walk_config(uint8_t *cfg, uint16_t total_len, struct ehci_hid_e
         }
         else if (type == USB_DESC_ENDPOINT && off + 7 <= total_len)
         {
+            if (in_cdc_data && !serial->found && !(cfg[off + 2] & 0x80) && (cfg[off + 3] & USB_EP_TYPE_MASK) == USB_EP_TYPE_BULK)
+            {
+                serial->found = true;
+                serial->out_ep = cfg[off + 2] & 0x0F;
+                serial->out_max_packet = (cfg[off + 4] | ((uint16_t)cfg[off + 5] << 8)) & 0x7FF;
+            }
+
             struct ehci_hid_ep_info *target = NULL;
             if (hid_protocol == HID_PROTOCOL_KEYBOARD && !kbd->found)
             {
@@ -843,8 +985,9 @@ static void ehci_enumerate_device(struct ehci_controller *hc, const struct ehci_
 
     struct ehci_hid_ep_info kbd = {0};
     struct ehci_hid_ep_info mouse = {0};
+    struct ehci_serial_ep_info serial = {0};
     bool is_hub = desc[4] == USB_CLASS_HUB;
-    ehci_walk_config(cfg, total_len, &kbd, &mouse, &is_hub);
+    ehci_walk_config(cfg, total_len, &kbd, &mouse, &serial, &is_hub);
 
     if (!ehci_control_transfer(hc, address, path, mps0, 0x00, USB_REQ_SET_CONFIGURATION, cfg_head[5], 0, 0, NULL))
     {
@@ -854,6 +997,12 @@ static void ehci_enumerate_device(struct ehci_controller *hc, const struct ehci_
     if (is_hub)
     {
         ehci_probe_hub(hc, address, path, mps0, depth);
+        return;
+    }
+
+    if (serial.found)
+    {
+        ehci_serial_setup(hc, address, path, mps0, &serial);
         return;
     }
 

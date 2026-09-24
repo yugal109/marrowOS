@@ -135,6 +135,9 @@ struct marrowos_system_info
     unsigned int second;
     unsigned int cpu_temp_valid;
     unsigned int cpu_temp_c;
+    // 0 = no adapter, 1 = ready, 2 = failed
+    unsigned int serial_state;
+    unsigned int serial_baud;
 };
 
 struct marrowos_disk_info
@@ -153,5 +156,7 @@ int marrowos_system_info(struct marrowos_system_info *info);
 int marrowos_disk_info(int index, struct marrowos_disk_info *info);
 // Restart does not return; power off returns only if the hardware ignored it
 int marrowos_power(int action);
+// Sends up to 1024 bytes over the serial adapter; returns bytes sent or a negative error
+int marrowos_serial_write(const void *data, unsigned long length);
 
 #endif

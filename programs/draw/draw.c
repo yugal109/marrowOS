@@ -5,6 +5,8 @@
 #include "graphics.h"
 #include "image.h"
 #include "font.h"
+#include "string.h"
+#include "print.h"
 
 // The eraser is wider so it clears a useful area, not one pen stroke
 #define DRAW_BRUSH_SIZE 3
@@ -18,6 +20,9 @@
 #define TOOLBAR_BTN_INSET (TOOLBAR_BTN_SIZE / 4)
 #define TOOLBAR_RING 2
 #define TOOLBAR_TOTAL_BTNS 7
+#define TOOLBAR_PRINT_WIDTH 56
+#define PRINT_STATUS_MAX 40
+#define FONT_HEIGHT 16
 
 // Keeps strokes off the window edge, where they leave line artifacts
 #define CANVAS_MARGIN 10
@@ -31,6 +36,8 @@ enum
     TOOLBAR_BTN_ERASER,
     TOOLBAR_BTN_UNDO,
     TOOLBAR_BTN_CLEAR,
+    // Not a swatch: sits at the right end of the toolbar
+    TOOLBAR_BTN_PRINT,
 };
 
 struct framebuffer_pixel color_white = {.red = 0xff, .green = 0xff, .blue = 0xff, .reserved = 0};
@@ -57,8 +64,13 @@ int toolbar_btn_y()
     return (TOOLBAR_HEIGHT - TOOLBAR_BTN_SIZE) / 2;
 }
 
+int toolbar_print_x(int window_width)
+{
+    return window_width - TOOLBAR_PRINT_WIDTH - TOOLBAR_MARGIN;
+}
+
 // -1 if the click missed every button, margins included
-int toolbar_hit_test(int x, int y)
+int toolbar_hit_test(int x, int y, int window_width)
 {
     int by = toolbar_btn_y();
     if (y < by || y >= by + TOOLBAR_BTN_SIZE)
@@ -73,6 +85,12 @@ int toolbar_hit_test(int x, int y)
         {
             return i;
         }
+    }
+
+    int print_x = toolbar_print_x(window_width);
+    if (x >= print_x && x < print_x + TOOLBAR_PRINT_WIDTH)
+    {
+        return TOOLBAR_BTN_PRINT;
     }
 
     return -1;
@@ -164,9 +182,34 @@ void draw_line(struct graphics *canvas, int x0, int y0, int x1, int y1, int brus
     }
 }
 
+// Progress and result of the last Print, shown left of the Print button
+static char print_status[PRINT_STATUS_MAX];
+
+void toolbar_print_draw(struct graphics *canvas, int window_width)
+{
+    int x = toolbar_print_x(window_width);
+    int y = toolbar_btn_y();
+    struct framebuffer_pixel fill = {.red = 0xc8, .green = 0xdc, .blue = 0xf0, .reserved = 0};
+    graphics_draw_rect(canvas, x, y, TOOLBAR_PRINT_WIDTH, TOOLBAR_BTN_SIZE, fill);
+    graphics_draw_rect(canvas, x, y, TOOLBAR_PRINT_WIDTH, 2, toolbar_border);
+    graphics_draw_rect(canvas, x, y + TOOLBAR_BTN_SIZE - 2, TOOLBAR_PRINT_WIDTH, 2, toolbar_border);
+    graphics_draw_rect(canvas, x, y, 2, TOOLBAR_BTN_SIZE, toolbar_border);
+    graphics_draw_rect(canvas, x + TOOLBAR_PRINT_WIDTH - 2, y, 2, TOOLBAR_BTN_SIZE, toolbar_border);
+
+    struct font *font = font_get_system_font();
+    font_draw_text(canvas, font, x + 5, y + (TOOLBAR_BTN_SIZE - FONT_HEIGHT) / 2, "Print", toolbar_border);
+
+    int status_x = toolbar_btn_x(TOOLBAR_TOTAL_BTNS) + 4;
+    if (print_status[0] && status_x < x)
+    {
+        font_draw_text(canvas, font, status_x, (TOOLBAR_HEIGHT - FONT_HEIGHT) / 2, print_status, toolbar_border);
+    }
+}
+
 void toolbar_draw(struct graphics *canvas, int window_width, struct framebuffer_pixel current_color)
 {
     graphics_draw_rect(canvas, 0, 0, window_width, TOOLBAR_HEIGHT, toolbar_bg);
+    toolbar_print_draw(canvas, window_width);
 
     struct framebuffer_pixel color_undo_bg = {.red = 0xa8, .green = 0xa8, .blue = 0xa8, .reserved = 0};
     struct framebuffer_pixel color_clear_bg = {.red = 0xe6, .green = 0xb8, .blue = 0x8a, .reserved = 0};
@@ -219,6 +262,45 @@ void toolbar_draw(struct graphics *canvas, int window_width, struct framebuffer_
             break;
         }
     }
+}
+
+static struct window *print_window;
+static struct graphics *print_graphics;
+static struct framebuffer_pixel print_color;
+
+static void print_status_show(const char *text)
+{
+    strncpy(print_status, text, PRINT_STATUS_MAX - 1);
+    print_status[PRINT_STATUS_MAX - 1] = 0;
+    toolbar_draw(print_graphics, print_window->width, print_color);
+    redraw_region_clamped(print_window, 0, 0, print_window->width, TOOLBAR_HEIGHT);
+}
+
+static void print_progress(int percent)
+{
+    char text[PRINT_STATUS_MAX];
+    sprintf(text, "Sending %i%%", percent);
+    print_status_show(text);
+}
+
+// Sends the drawing area (everything below the toolbar) to the serial adapter
+static void print_start(struct window *win, struct graphics *canvas, struct framebuffer_pixel color)
+{
+    print_window = win;
+    print_graphics = canvas;
+    print_color = color;
+    print_status_show("Sending 0%");
+
+    int sent = print_canvas(canvas->pixels, canvas->width, canvas->height, TOOLBAR_HEIGHT, print_progress);
+    if (sent < 0)
+    {
+        print_status_show("Send failed");
+        return;
+    }
+
+    char text[PRINT_STATUS_MAX];
+    sprintf(text, "Sent %i bytes", sent);
+    print_status_show(text);
 }
 
 int main(int argc, char **argv)
@@ -281,7 +363,7 @@ int main(int argc, char **argv)
 
                 if (press_on_toolbar)
                 {
-                    int hit = toolbar_hit_test(cur_x, cur_y);
+                    int hit = toolbar_hit_test(cur_x, cur_y, main_win->width);
                     switch (hit)
                     {
                     case TOOLBAR_BTN_RED:
@@ -297,6 +379,10 @@ int main(int argc, char **argv)
                     case TOOLBAR_BTN_BLUE:
                         current_color = color_blue;
                         current_brush = DRAW_BRUSH_SIZE;
+                        break;
+
+                    case TOOLBAR_BTN_PRINT:
+                        print_start(main_win, canvas, current_color);
                         break;
 
                     case TOOLBAR_BTN_BLACK:

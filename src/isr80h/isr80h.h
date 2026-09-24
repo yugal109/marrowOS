@@ -32,6 +32,7 @@ enum Systemcommands
     SYSTEM_COMMAND26_SYSTEM_INFO,
     SYSTEM_COMMAND27_DISK_INFO,
     SYSTEM_COMMAND28_POWER,
+    SYSTEM_COMMAND29_SERIAL_WRITE,
 };
 
 void isr80h_register_commands();
