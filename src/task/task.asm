@@ -10,6 +10,8 @@ global user_registers
 ; struct registers: 0 rdi, 8 rsi, 16 rbp, 24 rbx, 32 rdx, 40 rcx, 48 rax,
 ;                   56 ip, 64 cs, 72 flags, 80 rsp, 88 ss
 task_return:
+    ; struct task starts with its registers, and fpu_state sits at offset 96 (TASK_FPU_STATE_OFFSET)
+    fxrstor [rdi+96]
     push qword [rdi+88] ; SS
     push qword [rdi+80] ; RSP
     mov rax, [rdi+72]   ; RFLAGS

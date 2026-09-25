@@ -219,10 +219,28 @@ void kernel_preload_dock_app(const char *path, int dock_slot)
     process->start_hidden = true;
 }
 
+// The interrupt code saves and restores each task's x87/SSE registers with fxsave/fxrstor, which
+// fault unless CR0.MP is set, CR0.EM is clear and CR4.OSFXSR/OSXMMEXCPT are set. Firmware normally
+// leaves it that way, but this does not rely on it
+static void kernel_fpu_enable()
+{
+    uint64_t cr0 = 0;
+    uint64_t cr4 = 0;
+    __asm__ volatile("mov %%cr0, %0" : "=r"(cr0));
+    cr0 &= ~(1ULL << 2);
+    cr0 |= (1ULL << 1);
+    __asm__ volatile("mov %0, %%cr0" : : "r"(cr0));
+    __asm__ volatile("mov %%cr4, %0" : "=r"(cr4));
+    cr4 |= (1ULL << 9) | (1ULL << 10);
+    __asm__ volatile("mov %0, %%cr4" : : "r"(cr4));
+    __asm__ volatile("fninit");
+}
+
 // defined in kernel.asm
 extern struct graphics_info default_graphics_info;
 void kernel_main()
 {
+    kernel_fpu_enable();
     tsc_boot_mark();
 
     struct graphics_info *screen_info = NULL;

@@ -12,11 +12,13 @@
 #define CLASSIC_KEYBOARD_CAPSLOCK 0x3A
 #define CLASSIC_KEYBOARD_LEFT_SHIFT 0x2A
 #define CLASSIC_KEYBOARD_RIGHT_SHIFT 0x36
+#define CLASSIC_KEYBOARD_LEFT_CTRL 0x1D
 
 int classic_keyboard_init();
 void classic_keyboard_handle_interrupt();
 
 static bool classic_keyboard_shift_held = false;
+static bool classic_keyboard_ctrl_held = false;
 
 // basically the index of this array is actually the scan code and the index value is the corresponding ascii
 static uint8_t keyboard_scan_set_one[] = {
@@ -79,6 +81,12 @@ uint8_t classic_keyboard_scancode_to_char(uint8_t scancode)
 
     if (c >= 'A' && c <= 'Z')
     {
+        if (classic_keyboard_ctrl_held)
+        {
+            // Same convention as a terminal: Ctrl+A is 1, Ctrl+B is 2 ... Ctrl+Z is 26
+            return c - 'A' + 1;
+        }
+
         // Shift and caps lock cancel out
         bool caps_on = keyboard_get_capslock(&classic_keyboard) == KEYBOARD_CAPS_LOCK_ON;
         bool want_upper = caps_on != classic_keyboard_shift_held;
@@ -113,6 +121,12 @@ void classic_keyboard_handle_interrupt()
     if (make_code == CLASSIC_KEYBOARD_LEFT_SHIFT || make_code == CLASSIC_KEYBOARD_RIGHT_SHIFT)
     {
         classic_keyboard_shift_held = !released;
+        return;
+    }
+
+    if (make_code == CLASSIC_KEYBOARD_LEFT_CTRL)
+    {
+        classic_keyboard_ctrl_held = !released;
         return;
     }
 

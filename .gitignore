@@ -43,3 +43,6 @@ module2
 sata.sh
 rund.sh
 buildd.sh
+
+# Rain host test binaries
+programs/rain/host_test/build/

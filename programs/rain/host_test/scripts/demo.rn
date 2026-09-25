@@ -1,0 +1,30 @@
+// Rain demo: press Run, then expand the terminal
+print "Hello from Rain!";
+
+fun fib(n) {
+    if (n < 2) return n;
+    return fib(n - 1) + fib(n - 2);
+}
+
+for (var i = 0; i < 8; i = i + 1) {
+    print "fib(" + toString(i) + ") = " + toString(fib(i));
+}
+
+fun counter() {
+    var c = 0;
+    fun next() {
+        c = c + 1;
+        return c;
+    }
+    return next;
+}
+
+var tick = counter();
+tick();
+tick();
+print "closure counted " + toString(tick());
+
+var names = #["rain", "marrow", "os"];
+for (name von names) {
+    print "hello " + name;
+}

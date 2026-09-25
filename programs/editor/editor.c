@@ -6,6 +6,7 @@
 #include "font.h"
 #include "string.h"
 #include "marrowos.h"
+#include "rain.h"
 
 #define EDITOR_TEXT_INITIAL_CAPACITY 4096
 #define EDITOR_MARGIN 6
@@ -15,6 +16,8 @@
 #define TOOLBAR_HEIGHT 30
 #define TOOLBAR_MARGIN 8
 #define RUN_BUTTON_WIDTH 56
+#define DEMO_BUTTON_WIDTH 56
+#define TOOLBAR_BUTTON_GAP 8
 #define RUN_BUTTON_HEIGHT 20
 #define TEXT_ORIGIN_Y (TOOLBAR_HEIGHT + EDITOR_MARGIN)
 
@@ -26,9 +29,12 @@
 #define PANEL_HISTORY 32
 #define PANEL_LINE_MAX 96
 #define PANEL_CLOSE_WIDTH 28
+#define PANEL_MAXIMIZE_WIDTH 28
+#define PANEL_ICON_SIZE 10
 
 struct framebuffer_pixel color_white = {.red = 0xff, .green = 0xff, .blue = 0xff, .reserved = 0};
 struct framebuffer_pixel color_ink = {.red = 0x20, .green = 0x20, .blue = 0x20, .reserved = 0};
+struct framebuffer_pixel color_selection = {.red = 0xb4, .green = 0xd5, .blue = 0xfe, .reserved = 0};
 struct framebuffer_pixel color_toolbar = {.red = 0xe0, .green = 0xe0, .blue = 0xe0, .reserved = 0};
 struct framebuffer_pixel color_toolbar_border = {.red = 0x40, .green = 0x40, .blue = 0x40, .reserved = 0};
 struct framebuffer_pixel color_run_button = {.red = 0xc8, .green = 0xdc, .blue = 0xf0, .reserved = 0};
@@ -42,9 +48,16 @@ int text_len = 0;
 int text_capacity = 0;
 int cursor_index = 0;
 
+// Selection runs between selection_anchor (where the drag started) and cursor_index. It is empty when
+// the anchor is -1 or equal to the cursor
+int selection_anchor = -1;
+bool selecting = false;
+
 // Terminal panel state. The panel is drawn on the editor's own canvas, and keys go to it while it has focus
 bool panel_open = false;
 bool panel_focused = false;
+// When set, the panel covers the whole text area (everything below the toolbar)
+bool panel_maximized = false;
 char panel_history[PANEL_HISTORY][PANEL_LINE_MAX];
 int panel_history_count = 0;
 char panel_input[PANEL_LINE_MAX];
@@ -55,6 +68,11 @@ int last_bottom_y = 0;
 
 int panel_height(struct window *win)
 {
+    if (panel_maximized)
+    {
+        return win->height - TOOLBAR_HEIGHT;
+    }
+
     int height = win->height * PANEL_PERCENT / 100;
     if (height < PANEL_MIN_HEIGHT)
     {
@@ -133,6 +151,32 @@ void editor_backspace()
     text_len--;
     cursor_index--;
     text[text_len] = 0;
+}
+
+// The selected range as [start, end), or false when nothing is selected
+bool selection_bounds(int *start, int *end)
+{
+    if (selection_anchor < 0 || selection_anchor == cursor_index)
+    {
+        return false;
+    }
+    *start = selection_anchor < cursor_index ? selection_anchor : cursor_index;
+    *end = selection_anchor < cursor_index ? cursor_index : selection_anchor;
+    return true;
+}
+
+// Removes text[start, end) and leaves the cursor where it was
+void editor_delete_range(int start, int end)
+{
+    int count = end - start;
+    for (int i = start; i + count <= text_len; i++)
+    {
+        text[i] = text[i + count];
+    }
+    text_len -= count;
+    text[text_len] = 0;
+    cursor_index = start;
+    selection_anchor = -1;
 }
 
 // Mirrors font_draw_text_wrap's wrap/newline logic, so it agrees with it
@@ -250,6 +294,56 @@ void editor_row_start(struct font *font, int origin_x, int origin_y, int width, 
     *out_y = row_y;
 }
 
+// Paints the highlight behind the selected characters, walking the text the way font_draw_text_wrap does.
+// A selected line break gets a one character wide mark at the end of its line
+void editor_draw_selection(struct graphics *canvas, struct font *font, int origin_x, int row_y, int width, int row_index, int area_bottom)
+{
+    int start = 0;
+    int end = 0;
+    if (!selection_bounds(&start, &end))
+    {
+        return;
+    }
+
+    int char_w = font->bits_width_per_character;
+    int char_h = font->bits_height_per_character;
+    int x = origin_x;
+    int y = row_y;
+    int ending_x = origin_x + width;
+
+    for (int i = row_index; i < text_len && i < end; i++)
+    {
+        if (y + char_h > area_bottom)
+        {
+            break;
+        }
+        if (text[i] == EDITOR_KEY_ENTER)
+        {
+            if (i >= start)
+            {
+                graphics_draw_rect(canvas, x, y, char_w, char_h, color_selection);
+            }
+            x = origin_x;
+            y += char_h;
+            continue;
+        }
+        if (x >= ending_x)
+        {
+            x = origin_x;
+            y += char_h;
+            if (y + char_h > area_bottom)
+            {
+                break;
+            }
+        }
+        if (i >= start)
+        {
+            graphics_draw_rect(canvas, x, y, char_w, char_h, color_selection);
+        }
+        x += char_w;
+    }
+}
+
 // Repaints from from_index's row down. Redrawing the whole window per
 // keystroke cost ~480k pixel writes a character.
 void editor_redraw(struct window *win, struct graphics *canvas, struct font *font, int from_index)
@@ -291,6 +385,7 @@ void editor_redraw(struct window *win, struct graphics *canvas, struct font *fon
     }
 
     graphics_draw_rect(canvas, 0, row_y, win->width, dirty_height, color_white);
+    editor_draw_selection(canvas, font, origin_x, row_y, width, row_index, area_bottom);
     // A row is drawn whole once it starts, so stop a row early to stay above the panel
     int draw_height = area_bottom - font->bits_height_per_character + 1 - row_y;
     if (draw_height > 0)
@@ -309,26 +404,50 @@ void editor_redraw(struct window *win, struct graphics *canvas, struct font *fon
     window_redraw_region(win, 0, row_y, win->width, dirty_height);
 }
 
+int run_button_x(struct window *win)
+{
+    return win->width - RUN_BUTTON_WIDTH - TOOLBAR_MARGIN;
+}
+
+// Demo sits just left of Run
+int demo_button_x(struct window *win)
+{
+    return run_button_x(win) - TOOLBAR_BUTTON_GAP - DEMO_BUTTON_WIDTH;
+}
+
+void toolbar_button_draw(struct graphics *canvas, struct font *font, int x, int width, const char *label)
+{
+    int y = (TOOLBAR_HEIGHT - RUN_BUTTON_HEIGHT) / 2;
+    graphics_draw_rect(canvas, x, y, width, RUN_BUTTON_HEIGHT, color_run_button);
+    graphics_draw_rect(canvas, x, y, width, 2, color_toolbar_border);
+    graphics_draw_rect(canvas, x, y + RUN_BUTTON_HEIGHT - 2, width, 2, color_toolbar_border);
+    graphics_draw_rect(canvas, x, y, 2, RUN_BUTTON_HEIGHT, color_toolbar_border);
+    graphics_draw_rect(canvas, x + width - 2, y, 2, RUN_BUTTON_HEIGHT, color_toolbar_border);
+    font_draw_text(canvas, font, x + (width - (int)strlen(label) * (int)font->bits_width_per_character) / 2,
+                   y + (RUN_BUTTON_HEIGHT - (int)font->bits_height_per_character) / 2, label, color_toolbar_border);
+}
+
 void toolbar_draw(struct window *win, struct graphics *canvas, struct font *font)
 {
     graphics_draw_rect(canvas, 0, 0, win->width, TOOLBAR_HEIGHT, color_toolbar);
+    toolbar_button_draw(canvas, font, demo_button_x(win), DEMO_BUTTON_WIDTH, "Demo");
+    toolbar_button_draw(canvas, font, run_button_x(win), RUN_BUTTON_WIDTH, "Run");
+}
 
-    int x = win->width - RUN_BUTTON_WIDTH - TOOLBAR_MARGIN;
-    int y = (TOOLBAR_HEIGHT - RUN_BUTTON_HEIGHT) / 2;
-    graphics_draw_rect(canvas, x, y, RUN_BUTTON_WIDTH, RUN_BUTTON_HEIGHT, color_run_button);
-    graphics_draw_rect(canvas, x, y, RUN_BUTTON_WIDTH, 2, color_toolbar_border);
-    graphics_draw_rect(canvas, x, y + RUN_BUTTON_HEIGHT - 2, RUN_BUTTON_WIDTH, 2, color_toolbar_border);
-    graphics_draw_rect(canvas, x, y, 2, RUN_BUTTON_HEIGHT, color_toolbar_border);
-    graphics_draw_rect(canvas, x + RUN_BUTTON_WIDTH - 2, y, 2, RUN_BUTTON_HEIGHT, color_toolbar_border);
-    font_draw_text(canvas, font, x + (RUN_BUTTON_WIDTH - 3 * (int)font->bits_width_per_character) / 2,
-                   y + (RUN_BUTTON_HEIGHT - (int)font->bits_height_per_character) / 2, "Run", color_toolbar_border);
+static bool toolbar_button_hit(int button_x, int button_width, int x, int y)
+{
+    int by = (TOOLBAR_HEIGHT - RUN_BUTTON_HEIGHT) / 2;
+    return x >= button_x && x < button_x + button_width && y >= by && y < by + RUN_BUTTON_HEIGHT;
 }
 
 bool run_button_hit(struct window *win, int x, int y)
 {
-    int bx = win->width - RUN_BUTTON_WIDTH - TOOLBAR_MARGIN;
-    int by = (TOOLBAR_HEIGHT - RUN_BUTTON_HEIGHT) / 2;
-    return x >= bx && x < bx + RUN_BUTTON_WIDTH && y >= by && y < by + RUN_BUTTON_HEIGHT;
+    return toolbar_button_hit(run_button_x(win), RUN_BUTTON_WIDTH, x, y);
+}
+
+bool demo_button_hit(struct window *win, int x, int y)
+{
+    return toolbar_button_hit(demo_button_x(win), DEMO_BUTTON_WIDTH, x, y);
 }
 
 // Drawn text does not clip, so cut it to what fits on the row
@@ -352,6 +471,33 @@ void panel_draw_clipped(struct graphics *canvas, struct font *font, int x, int y
     font_draw_text(canvas, font, x, y, clipped, color);
 }
 
+// A 1 pixel outline
+void panel_draw_frame(struct graphics *canvas, int x, int y, int width, int height, struct framebuffer_pixel color)
+{
+    graphics_draw_rect(canvas, x, y, width, 1, color);
+    graphics_draw_rect(canvas, x, y + height - 1, width, 1, color);
+    graphics_draw_rect(canvas, x, y, 1, height, color);
+    graphics_draw_rect(canvas, x + width - 1, y, 1, height, color);
+}
+
+// The expand icon is a window with a thick top edge. When expanded it is two overlapping
+// squares, the usual "restore" icon
+void panel_draw_maximize_icon(struct graphics *canvas, int x, int y)
+{
+    if (!panel_maximized)
+    {
+        panel_draw_frame(canvas, x, y, PANEL_ICON_SIZE, PANEL_ICON_SIZE, color_panel_text);
+        graphics_draw_rect(canvas, x, y, PANEL_ICON_SIZE, 2, color_panel_text);
+        return;
+    }
+
+    int small = PANEL_ICON_SIZE - 2;
+    graphics_draw_rect(canvas, x + 2, y, small, 1, color_panel_text);
+    graphics_draw_rect(canvas, x + PANEL_ICON_SIZE - 1, y, 1, small - 1, color_panel_text);
+    panel_draw_frame(canvas, x, y + 2, small, small, color_panel_text);
+    graphics_draw_rect(canvas, x, y + 2, small, 2, color_panel_text);
+}
+
 void panel_draw(struct window *win, struct graphics *canvas, struct font *font)
 {
     int panel_h = panel_height(win);
@@ -363,6 +509,8 @@ void panel_draw(struct window *win, struct graphics *canvas, struct font *font)
     graphics_draw_rect(canvas, 0, top, win->width, PANEL_HEADER_HEIGHT, color_panel_header);
     font_draw_text(canvas, font, PANEL_PADDING, top + (PANEL_HEADER_HEIGHT - char_h) / 2, "Terminal", color_panel_text);
     font_draw_text(canvas, font, win->width - PANEL_CLOSE_WIDTH + (PANEL_CLOSE_WIDTH - char_w) / 2, top + (PANEL_HEADER_HEIGHT - char_h) / 2, "X", color_panel_text);
+    panel_draw_maximize_icon(canvas, win->width - PANEL_CLOSE_WIDTH - PANEL_MAXIMIZE_WIDTH + (PANEL_MAXIMIZE_WIDTH - PANEL_ICON_SIZE) / 2,
+                             top + (PANEL_HEADER_HEIGHT - PANEL_ICON_SIZE) / 2);
 
     int max_chars = (win->width - PANEL_PADDING * 2) / char_w;
     int rows = (panel_h - PANEL_HEADER_HEIGHT - 4) / char_h;
@@ -372,9 +520,9 @@ void panel_draw(struct window *win, struct graphics *canvas, struct font *font)
         return;
     }
 
-    // The last row is the prompt, the rows above it are the newest output
-    int history_rows = rows - 1;
-    int first = panel_history_count > history_rows ? panel_history_count - history_rows : 0;
+    // Output starts at the top and the prompt follows it. Once the panel is full the oldest lines scroll off
+    int history_rows = panel_history_count < rows - 1 ? panel_history_count : rows - 1;
+    int first = panel_history_count - history_rows;
     int y = top + PANEL_HEADER_HEIGHT + 2;
     for (int i = first; i < panel_history_count; i++)
     {
@@ -383,7 +531,7 @@ void panel_draw(struct window *win, struct graphics *canvas, struct font *font)
     }
 
     // Long input shows its tail, so what is being typed stays visible
-    int prompt_y = top + PANEL_HEADER_HEIGHT + 2 + history_rows * char_h;
+    int prompt_y = y;
     font_draw_text(canvas, font, PANEL_PADDING, prompt_y, ">", color_panel_prompt);
     int input_chars = max_chars - 3;
     int start = panel_input_len > input_chars ? panel_input_len - input_chars : 0;
@@ -465,6 +613,131 @@ bool panel_run_command()
     return false;
 }
 
+// The program the Demo button puts in the editor
+static const char demo_source[] =
+    "// Rain demo: press Run, then expand the terminal\n"
+    "print \"Hello from Rain!\";\n"
+    "\n"
+    "fun fib(n) {\n"
+    "    if (n < 2) return n;\n"
+    "    return fib(n - 1) + fib(n - 2);\n"
+    "}\n"
+    "\n"
+    "for (var i = 0; i < 8; i = i + 1) {\n"
+    "    print \"fib(\" + toString(i) + \") = \" + toString(fib(i));\n"
+    "}\n"
+    "\n"
+    "fun counter() {\n"
+    "    var c = 0;\n"
+    "    fun next() {\n"
+    "        c = c + 1;\n"
+    "        return c;\n"
+    "    }\n"
+    "    return next;\n"
+    "}\n"
+    "\n"
+    "var tick = counter();\n"
+    "tick();\n"
+    "tick();\n"
+    "print \"closure counted \" + toString(tick());\n"
+    "\n"
+    "var names = #[\"rain\", \"marrow\", \"os\"];\n"
+    "for (name von names) {\n"
+    "    print \"hello \" + name;\n"
+    "}\n";
+
+// Replaces the editor text with the demo. Enter is stored as a carriage return in this editor
+static void editor_load_demo()
+{
+    int length = (int)strlen(demo_source);
+    if (!editor_ensure_capacity(length + 1))
+    {
+        return;
+    }
+
+    for (int i = 0; i < length; i++)
+    {
+        text[i] = demo_source[i] == '\n' ? EDITOR_KEY_ENTER : demo_source[i];
+    }
+    text[length] = 0;
+    text_len = length;
+    cursor_index = 0;
+    selection_anchor = -1;
+    selecting = false;
+    panel_focused = false;
+}
+
+// Rain prints in pieces, so text is gathered into lines before it goes to the panel
+static char run_line[PANEL_LINE_MAX];
+static int run_line_len = 0;
+
+static void run_flush_line()
+{
+    run_line[run_line_len] = 0;
+    panel_push_line(run_line);
+    run_line_len = 0;
+}
+
+static void editor_rain_write(const char *text, int length, int is_error)
+{
+    for (int i = 0; i < length; i++)
+    {
+        char c = text[i];
+        if (c == '\n')
+        {
+            run_flush_line();
+            continue;
+        }
+        if (c == '\r')
+        {
+            continue;
+        }
+        if (c == '\t')
+        {
+            c = ' ';
+        }
+        if (c < 0x20 || c >= 0x7f)
+        {
+            c = '?';
+        }
+        if (run_line_len == PANEL_LINE_MAX - 1)
+        {
+            run_flush_line();
+        }
+        run_line[run_line_len++] = c;
+    }
+}
+
+// Runs the editor text as a Rain program and puts everything it prints into the panel
+static void editor_run_script()
+{
+    panel_history_count = 0;
+    panel_input_len = 0;
+    panel_input[0] = 0;
+    run_line_len = 0;
+
+    // The editor stores Enter as a carriage return, but Rain ends lines (and // comments) at \n
+    char *source = malloc(text_len + 1);
+    if (!source)
+    {
+        panel_push_line("not enough memory to run");
+        return;
+    }
+    for (int i = 0; i < text_len; i++)
+    {
+        source[i] = text[i] == EDITOR_KEY_ENTER ? '\n' : text[i];
+    }
+    source[text_len] = 0;
+
+    rain_run(source, editor_rain_write);
+    free(source);
+
+    if (run_line_len > 0)
+    {
+        run_flush_line();
+    }
+}
+
 int main(int argc, char **argv)
 {
     graphics_image_formats_init();
@@ -500,6 +773,7 @@ int main(int argc, char **argv)
     editor_layout_redraw(main_win, canvas, font);
 
     bool mouse_down = false;
+    int probe_index_override = -1;
 
     struct window_event event = {0};
     while (1)
@@ -518,6 +792,15 @@ int main(int argc, char **argv)
         {
             int key = event.data.keypress.key;
 
+            // Ctrl+A arrives as code 1: select all the text
+            if (key == 0x01 && !(panel_open && panel_focused))
+            {
+                selection_anchor = 0;
+                cursor_index = text_len;
+                editor_redraw(main_win, canvas, font, 0);
+                break;
+            }
+
             if (panel_open && panel_focused)
             {
                 if (key == EDITOR_KEY_BACKSPACE)
@@ -533,6 +816,7 @@ int main(int argc, char **argv)
                     {
                         panel_open = false;
                         panel_focused = false;
+                        panel_maximized = false;
                         editor_layout_redraw(main_win, canvas, font);
                         break;
                     }
@@ -549,16 +833,38 @@ int main(int argc, char **argv)
             bool is_backspace = key == EDITOR_KEY_BACKSPACE;
             bool is_printable = key == EDITOR_KEY_ENTER || (key >= 0x20 && key < 0x7f);
 
-            if (is_backspace && cursor_index == 0)
-            {
-                break;
-            }
             if (!is_backspace && !is_printable)
             {
                 break;
             }
+            // Nothing to delete before the first character, unless a selection is being removed
+            int pending_start = 0;
+            int pending_end = 0;
+            if (is_backspace && cursor_index == 0 && !selection_bounds(&pending_start, &pending_end))
+            {
+                break;
+            }
+
+            // Backspace removes a selection whole, and typing replaces it
+            int selection_start = 0;
+            int selection_end = 0;
+            if (selection_bounds(&selection_start, &selection_end))
+            {
+                editor_delete_range(selection_start, selection_end);
+                if (is_backspace)
+                {
+                    editor_redraw(main_win, canvas, font, selection_start);
+                    break;
+                }
+                probe_index_override = selection_start;
+            }
 
             int probe_index = is_backspace ? cursor_index - 1 : cursor_index;
+            if (probe_index_override >= 0)
+            {
+                probe_index = probe_index_override;
+                probe_index_override = -1;
+            }
 
             if (is_backspace)
             {
@@ -575,9 +881,32 @@ int main(int argc, char **argv)
 
         case WINDOW_EVENT_TYPE_MOUSE_CLICK:
         {
-            // The kernel repeats clicks while the button is held; only the first is a press
+            // The kernel repeats clicks while the button is held; only the first is a press.
+            // The repeats carry the pointer position, which is how a drag grows the selection
             if (mouse_down)
             {
+                if (selecting)
+                {
+                    int drag_width = main_win->width - EDITOR_MARGIN * 2;
+                    int drag_y = event.data.click.y;
+                    // Dragging into the toolbar or panel keeps the selection at the edge of the text area
+                    int area_bottom = text_bottom(main_win);
+                    if (drag_y >= area_bottom)
+                    {
+                        drag_y = area_bottom - 1;
+                    }
+                    if (drag_y < TEXT_ORIGIN_Y)
+                    {
+                        drag_y = TEXT_ORIGIN_Y;
+                    }
+
+                    int previous_cursor = cursor_index;
+                    cursor_index = editor_index_at_point(font, EDITOR_MARGIN, TEXT_ORIGIN_Y, drag_width, event.data.click.x, drag_y);
+                    if (cursor_index != previous_cursor)
+                    {
+                        editor_redraw(main_win, canvas, font, previous_cursor < cursor_index ? previous_cursor : cursor_index);
+                    }
+                }
                 break;
             }
             mouse_down = true;
@@ -587,11 +916,17 @@ int main(int argc, char **argv)
 
             if (click_y < TOOLBAR_HEIGHT)
             {
-                if (run_button_hit(main_win, click_x, click_y))
+                if (demo_button_hit(main_win, click_x, click_y))
+                {
+                    editor_load_demo();
+                    editor_layout_redraw(main_win, canvas, font);
+                }
+                else if (run_button_hit(main_win, click_x, click_y))
                 {
                     bool was_open = panel_open;
                     panel_open = true;
                     panel_focused = true;
+                    editor_run_script();
                     if (was_open)
                     {
                         editor_redraw(main_win, canvas, font, cursor_index);
@@ -608,10 +943,21 @@ int main(int argc, char **argv)
             if (panel_open && click_y >= main_win->height - panel_height(main_win))
             {
                 int panel_top = main_win->height - panel_height(main_win);
-                if (click_y < panel_top + PANEL_HEADER_HEIGHT && click_x >= main_win->width - PANEL_CLOSE_WIDTH)
+                bool in_header = click_y < panel_top + PANEL_HEADER_HEIGHT;
+                if (in_header && click_x >= main_win->width - PANEL_CLOSE_WIDTH)
                 {
                     panel_open = false;
                     panel_focused = false;
+                    panel_maximized = false;
+                    editor_layout_redraw(main_win, canvas, font);
+                    break;
+                }
+
+                if (in_header && click_x >= main_win->width - PANEL_CLOSE_WIDTH - PANEL_MAXIMIZE_WIDTH)
+                {
+                    // Expand over the text area, or shrink back
+                    panel_maximized = !panel_maximized;
+                    panel_focused = true;
                     editor_layout_redraw(main_win, canvas, font);
                     break;
                 }
@@ -627,12 +973,25 @@ int main(int argc, char **argv)
 
             int width = main_win->width - EDITOR_MARGIN * 2;
             int old_cursor = cursor_index;
+
+            // Whatever was selected before has to be repainted too
+            int old_selection_start = 0;
+            int old_selection_end = 0;
+            int redraw_from = old_cursor;
+            if (selection_bounds(&old_selection_start, &old_selection_end))
+            {
+                redraw_from = old_selection_start < redraw_from ? old_selection_start : redraw_from;
+            }
+
             cursor_index = editor_index_at_point(font, EDITOR_MARGIN, TEXT_ORIGIN_Y, width, click_x, click_y);
+            // A new selection starts here and grows while the button stays down
+            selection_anchor = cursor_index;
+            selecting = true;
             bool focus_changed = panel_focused;
             panel_focused = false;
 
-            // Covers erasing the old caret and drawing the new one
-            editor_redraw(main_win, canvas, font, old_cursor < cursor_index ? old_cursor : cursor_index);
+            // Covers erasing the old caret and selection and drawing the new caret
+            editor_redraw(main_win, canvas, font, redraw_from < cursor_index ? redraw_from : cursor_index);
             if (focus_changed && panel_open)
             {
                 panel_draw(main_win, canvas, font);
@@ -642,6 +1001,12 @@ int main(int argc, char **argv)
 
         case WINDOW_EVENT_TYPE_MOUSE_RELEASE:
             mouse_down = false;
+            selecting = false;
+            // A click without a drag selects nothing
+            if (selection_anchor == cursor_index)
+            {
+                selection_anchor = -1;
+            }
             break;
 
         case WINDOW_EVENT_TYPE_RESIZE:
@@ -658,6 +1023,7 @@ int main(int argc, char **argv)
                 return -1;
             }
             mouse_down = false;
+            selecting = false;
             editor_layout_redraw(main_win, canvas, font);
             break;
 

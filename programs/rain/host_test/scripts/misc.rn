@@ -1,0 +1,15 @@
+var a = #[1, 2, 3];
+print a;
+print typeOf(a);
+var greet = fun(x) { return "yo " + x; };
+print greet("there");
+fun counter() {
+    var c = 0;
+    fun inc() { c = c + 1; return c; }
+    return inc;
+}
+var k = counter();
+k(); k();
+print k();
+print toString(42) + "!";
+print clock() >= 0;

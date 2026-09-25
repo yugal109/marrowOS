@@ -197,8 +197,12 @@ struct paging_desc *task_current_paging_desc()
     return task_paging_desc(current_task);
 }
 
+// idt.asm saves the interrupted code's x87/SSE registers here as the first thing after an interrupt
+extern uint8_t isr_fpu_scratch[TASK_FPU_STATE_SIZE];
+
 void task_save_state(struct task *task, struct interrupt_frame *frame)
 {
+    memcpy(task->fpu_state, isr_fpu_scratch, TASK_FPU_STATE_SIZE);
     task->registers.ip = frame->ip;
     task->registers.cs = frame->cs;
     task->registers.flags = frame->flags;
@@ -310,6 +314,12 @@ int task_init(struct task *task, struct process *process)
         // panic("Elf files not supported\n");
         task->registers.ip = elf_header(process->elf_file)->e_entry;
     }
+
+    // Power-on defaults: x87 control word 0x037F and MXCSR 0x1F80 (all exceptions masked)
+    task->fpu_state[0] = 0x7F;
+    task->fpu_state[1] = 0x03;
+    task->fpu_state[24] = 0x80;
+    task->fpu_state[25] = 0x1F;
 
     task->registers.ss = USER_DATA_SEGMENT;
     task->registers.cs = USER_CODE_SEGMENT;

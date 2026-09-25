@@ -28,6 +28,9 @@ extern void int21h();
 extern void no_interrupt();
 extern void isr80h_wrapper();
 
+// Where the interrupt entry code in idt.asm saves the x87/SSE registers of whatever was interrupted
+uint8_t isr_fpu_scratch[512] __attribute__((aligned(16)));
+
 static int current_interrupt = -1;
 
 void interrupt_handler(int interrupt, struct interrupt_frame *frame)

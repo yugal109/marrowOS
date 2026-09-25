@@ -1,0 +1,16 @@
+print 0.1 + 0.2;
+print 1 / 3;
+print 10 / 4;
+print 100;
+print -5;
+print 3.14159265;
+print 1000000;
+print 123456;
+print 1234567;
+print 0.0001;
+print 0.00001;
+print 1000000 * 1000000 * 1000000 * 1000000;
+print 0.00000025;
+print 99999.95;
+print 0;
+print 1 / 8;

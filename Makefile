@@ -255,6 +255,7 @@ user_programs:
 	$(MAKE) -C ./programs/stdlib all
 	$(MAKE) -C ./programs/containerlib all
 	$(MAKE) -C ./programs/guilib all
+	$(MAKE) -C ./programs/rain all
 	$(MAKE) -C ./programs/simple all
 	$(MAKE) -C ./programs/blank all
 	$(MAKE) -C ./programs/shell all
@@ -268,6 +269,7 @@ user_programs_clean:
 	$(MAKE) -C ./programs/stdlib clean
 	$(MAKE) -C ./programs/containerlib clean
 	$(MAKE) -C ./programs/guilib clean
+	$(MAKE) -C ./programs/rain clean
 	$(MAKE) -C ./programs/blank clean
 	$(MAKE) -C ./programs/shell clean
 	$(MAKE) -C ./programs/calculator clean

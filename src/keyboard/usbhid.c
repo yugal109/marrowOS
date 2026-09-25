@@ -50,6 +50,7 @@ void usbhid_keyboard_process_report(const uint8_t *buf, uint32_t len)
 
     uint8_t modifiers = report[0];
     bool shift = (modifiers & 0x22) != 0; // left or right shift bit
+    bool ctrl = (modifiers & 0x11) != 0;  // left or right control bit
 
     uint8_t new_keys[6];
     memcpy(new_keys, (void *)&report[2], 6);
@@ -75,6 +76,11 @@ void usbhid_keyboard_process_report(const uint8_t *buf, uint32_t len)
         if (!already_down)
         {
             char c = usbhid_keycode_to_char(code, shift);
+            if (ctrl && ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')))
+            {
+                // Same convention as a terminal: Ctrl+A is 1, Ctrl+B is 2 ... Ctrl+Z is 26
+                c = (char)((c | 0x20) - 'a' + 1);
+            }
             if (c != 0)
             {
                 keyboard_push(c);

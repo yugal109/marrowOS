@@ -24,11 +24,20 @@ struct registers
     uint64_t ss;
 };
 
+// Size of an FXSAVE image: the x87, MMX and SSE registers of a task
+#define TASK_FPU_STATE_SIZE 512
+// Where fpu_state sits in struct task. task_return in task.asm loads it from this offset
+#define TASK_FPU_STATE_OFFSET 96
+
 struct process;
 struct task
 {
     // The registers of the task when the task is not running
     struct registers registers;
+
+    // The x87/SSE registers of the task when it is not running. Without this, two processes doing
+    // floating point (or the compiler's 16 byte copies) overwrite each other's values on a switch
+    uint8_t fpu_state[TASK_FPU_STATE_SIZE] __attribute__((aligned(16)));
 
     // The process of the task
     struct process *process;
@@ -45,6 +54,8 @@ struct task
     // Previous task in the linked list
     struct task *prev;
 };
+
+_Static_assert(__builtin_offsetof(struct task, fpu_state) == TASK_FPU_STATE_OFFSET, "task.asm expects fpu_state at TASK_FPU_STATE_OFFSET");
 
 struct task *task_new(struct process *process);
 struct task *task_current();

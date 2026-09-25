@@ -7,6 +7,7 @@ extern int21h_handler
 extern no_interrupt_handler
 extern isr80h_handler
 extern interrupt_handler
+extern isr_fpu_scratch
 
 global idt_load
 global idt_zero
@@ -63,7 +64,9 @@ idt_zero:
 
 no_interrupt:
     pushad_macro
+    fxsave [isr_fpu_scratch]
     call no_interrupt_handler
+    fxrstor [isr_fpu_scratch]
     popad_macro
     sti
     iretq
@@ -80,10 +83,14 @@ no_interrupt:
         ; uint64_t ss;
         ; Pushes the general purpose registers to the stack
         pushad_macro
+        ; Save the x87/SSE registers before any C code can use them. task_save_state copies them
+        ; into the task, and the fxrstor below puts them back if this returns to the same code
+        fxsave [isr_fpu_scratch]
         ; Interrupt frame end
         mov rdi, %1
         mov rsi,rsp
         call interrupt_handler
+        fxrstor [isr_fpu_scratch]
         popad_macro
         iretq
 %endmacro  
@@ -106,6 +113,7 @@ isr80h_wrapper:
     ; uint64_t ss;
     ; Pushes the general purpose registers to the stack
     pushad_macro
+    fxsave [isr_fpu_scratch]
 
     ; INTERRUPT FRAME END
     ; Second argument is the interrupt stack pointer
@@ -116,6 +124,7 @@ isr80h_wrapper:
 
     call isr80h_handler
     mov qword [tmp_res], rax
+    fxrstor [isr_fpu_scratch]
 
 
     ; Restore general purpose registers for user land

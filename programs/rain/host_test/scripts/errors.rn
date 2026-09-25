@@ -1,0 +1,3 @@
+print "before";
+print undefinedThing;
+print "never";
