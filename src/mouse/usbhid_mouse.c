@@ -47,6 +47,7 @@ void usbhid_mouse_process_report_layout(const struct hid_mouse_layout *layout, c
     uint8_t buttons;
     int dx;
     int dy;
+    int wheel = 0;
 
     if (layout && layout->valid)
     {
@@ -66,13 +67,22 @@ void usbhid_mouse_process_report_layout(const struct hid_mouse_layout *layout, c
         buttons = (uint8_t)hid_extract_unsigned(buf, len, layout->button_bit, layout->button_count);
         dx = hid_extract_signed(buf, len, layout->x_bit, layout->x_bits);
         dy = hid_extract_signed(buf, len, layout->y_bit, layout->y_bits);
+        if (layout->has_wheel)
+        {
+            wheel = hid_extract_signed(buf, len, layout->wheel_bit, layout->wheel_bits);
+        }
     }
     else
     {
-        // No layout: fixed boot layout
+        // No layout: fixed boot layout. Boot protocol is technically just
+        // buttons/X/Y, but most mice tack wheel on as byte 4 anyway (same as ps2mouse.c)
         buttons = buf[0];
         dx = (int8_t)buf[1];
         dy = (int8_t)buf[2];
+        if (len >= 4)
+        {
+            wheel = (int8_t)buf[3];
+        }
     }
 
     int x_result = (int)usbhid_mouse.coords.x + dx;
@@ -126,6 +136,11 @@ void usbhid_mouse_process_report_layout(const struct hid_mouse_layout *layout, c
     usbhid_mouse_prev_click_type = click_type;
 
     mouse_moved(&usbhid_mouse);
+
+    if (wheel != 0)
+    {
+        mouse_scrolled(&usbhid_mouse, wheel);
+    }
 }
 
 // Called once by xhci.c right after it configures a HID boot mouse's

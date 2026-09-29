@@ -14,6 +14,7 @@ struct vector *mouse_driver_vector = NULL;
 static struct vector *mouse_global_click_handlers = NULL;
 static struct vector *mouse_global_move_handlers = NULL;
 static struct vector *mouse_global_release_handlers = NULL;
+static struct vector *mouse_global_scroll_handlers = NULL;
 
 // Cursor arrow image, loaded once and reused for every redraw
 static struct image *mouse_cursor_image = NULL;
@@ -37,7 +38,8 @@ int mouse_system_init()
     mouse_global_click_handlers = vector_new(sizeof(MOUSE_CLICK_EVENT_HANDLER_FUNCTION), 4, 0);
     mouse_global_move_handlers = vector_new(sizeof(MOUSE_MOVE_EVENT_HANDLER_FUNCTION), 4, 0);
     mouse_global_release_handlers = vector_new(sizeof(MOUSE_RELEASE_EVENT_HANDLER_FUNCTION), 4, 0);
-    if (!mouse_driver_vector || !mouse_global_click_handlers || !mouse_global_move_handlers || !mouse_global_release_handlers)
+    mouse_global_scroll_handlers = vector_new(sizeof(MOUSE_SCROLL_EVENT_HANDLER_FUNCTION), 4, 0);
+    if (!mouse_driver_vector || !mouse_global_click_handlers || !mouse_global_move_handlers || !mouse_global_release_handlers || !mouse_global_scroll_handlers)
     {
         res = -ENOMEM;
         goto out;
@@ -124,6 +126,13 @@ int mouse_register(struct mouse *mouse)
         goto out;
     }
 
+    mouse->event_handlers.scroll_handlers = vector_new(sizeof(MOUSE_SCROLL_EVENT_HANDLER_FUNCTION), 4, 0);
+    if (!mouse->event_handlers.scroll_handlers)
+    {
+        res = -ENOMEM;
+        goto out;
+    }
+
     res = mouse->init(mouse);
     if (res < 0)
     {
@@ -158,6 +167,7 @@ int mouse_register(struct mouse *mouse)
     mouse_copy_handlers(mouse_global_click_handlers, mouse->event_handlers.click_handlers, sizeof(MOUSE_CLICK_EVENT_HANDLER_FUNCTION));
     mouse_copy_handlers(mouse_global_move_handlers, mouse->event_handlers.move_handlers, sizeof(MOUSE_MOVE_EVENT_HANDLER_FUNCTION));
     mouse_copy_handlers(mouse_global_release_handlers, mouse->event_handlers.release_handlers, sizeof(MOUSE_RELEASE_EVENT_HANDLER_FUNCTION));
+    mouse_copy_handlers(mouse_global_scroll_handlers, mouse->event_handlers.scroll_handlers, sizeof(MOUSE_SCROLL_EVENT_HANDLER_FUNCTION));
 
     vector_push(mouse_driver_vector, &mouse);
 out:
@@ -197,6 +207,21 @@ void mouse_released(struct mouse *mouse, MOUSE_CLICK_TYPE type)
         if (release_handler)
         {
             release_handler(mouse, mouse->coords.x, mouse->coords.y, type);
+        }
+    }
+}
+
+void mouse_scrolled(struct mouse *mouse, int delta)
+{
+    // Loop through every scroll handler and invoke it
+    size_t total_scroll_handlers = vector_count(mouse->event_handlers.scroll_handlers);
+    for (size_t i = 0; i < total_scroll_handlers; i++)
+    {
+        MOUSE_SCROLL_EVENT_HANDLER_FUNCTION scroll_handler = NULL;
+        vector_at(mouse->event_handlers.scroll_handlers, i, &scroll_handler, sizeof(scroll_handler));
+        if (scroll_handler)
+        {
+            scroll_handler(mouse, mouse->coords.x, mouse->coords.y, delta);
         }
     }
 }
@@ -255,6 +280,50 @@ void mouse_unregister_click_handler(struct mouse *mouse, MOUSE_CLICK_EVENT_HANDL
         if (_mouse)
         {
             mouse_unregister_click_handler(_mouse, click_handler);
+        }
+    }
+}
+
+void mouse_unregister_scroll_handler(struct mouse *mouse, MOUSE_SCROLL_EVENT_HANDLER_FUNCTION scroll_handler)
+{
+    if (mouse)
+    {
+        vector_pop_element(mouse->event_handlers.scroll_handlers, &scroll_handler, sizeof(scroll_handler));
+        return;
+    }
+
+    vector_pop_element(mouse_global_scroll_handlers, &scroll_handler, sizeof(scroll_handler));
+
+    size_t total_mice = vector_count(mouse_driver_vector);
+    for (size_t i = 0; i < total_mice; i++)
+    {
+        struct mouse *_mouse = NULL;
+        vector_at(mouse_driver_vector, i, &_mouse, sizeof(_mouse));
+        if (_mouse)
+        {
+            mouse_unregister_scroll_handler(_mouse, scroll_handler);
+        }
+    }
+}
+
+void mouse_register_scroll_handler(struct mouse *mouse, MOUSE_SCROLL_EVENT_HANDLER_FUNCTION scroll_handler)
+{
+    if (mouse)
+    {
+        vector_push(mouse->event_handlers.scroll_handlers, &scroll_handler);
+        return;
+    }
+
+    vector_push(mouse_global_scroll_handlers, &scroll_handler);
+
+    size_t total_mice = vector_count(mouse_driver_vector);
+    for (size_t i = 0; i < total_mice; i++)
+    {
+        struct mouse *_mouse = NULL;
+        vector_at(mouse_driver_vector, i, &_mouse, sizeof(_mouse));
+        if (_mouse)
+        {
+            mouse_register_scroll_handler(_mouse, scroll_handler);
         }
     }
 }

@@ -14,7 +14,8 @@ enum
     WINDOW_EVENT_TYPE_WINDOW_CLOSE,
     WINDOW_EVENT_TYPE_KEY_PRESS,
     WINDOW_EVENT_TYPE_MOUSE_RELEASE,
-    WINDOW_EVENT_TYPE_RESIZE
+    WINDOW_EVENT_TYPE_RESIZE,
+    WINDOW_EVENT_TYPE_SCROLL
 };
 
 struct window_event
@@ -60,6 +61,14 @@ struct window_event
             int width;
             int height;
         } resize;
+
+        // relative to the window body; positive scrolls up, negative scrolls down
+        struct
+        {
+            int x;
+            int y;
+            int delta;
+        } scroll;
 
     } data;
 };

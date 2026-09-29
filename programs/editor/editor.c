@@ -66,6 +66,12 @@ int panel_input_len = 0;
 // Text extent at the last redraw, so shrinking text clears its old rows
 int last_bottom_y = 0;
 
+// Vertical scroll. scroll_line is the row pinned at TEXT_ORIGIN_Y, scroll_top_index
+// is that row's character index - editor_scroll_clamp keeps both in bounds
+int scroll_line = 0;
+int scroll_top_index = 0;
+#define EDITOR_SCROLL_LINES_PER_NOTCH 3
+
 int panel_height(struct window *win)
 {
     if (panel_maximized)
@@ -179,14 +185,16 @@ void editor_delete_range(int start, int end)
     selection_anchor = -1;
 }
 
-// Mirrors font_draw_text_wrap's wrap/newline logic, so it agrees with it
-void editor_screen_pos(struct font *font, int origin_x, int origin_y, int width, int target_index, int *out_x, int *out_y)
+// Mirrors font_draw_text_wrap's wrap/newline logic, so it agrees with it.
+// base_index is the character sitting at (origin_x, origin_y) - 0 normally,
+// or scroll_top_index once the view has been scrolled
+void editor_screen_pos(struct font *font, int origin_x, int origin_y, int width, int base_index, int target_index, int *out_x, int *out_y)
 {
     int current_x = origin_x;
     int current_y = origin_y;
     int ending_x = origin_x + width;
 
-    for (int i = 0; i < target_index && i < text_len; i++)
+    for (int i = base_index; i < target_index && i < text_len; i++)
     {
         if (text[i] == EDITOR_KEY_ENTER)
         {
@@ -208,7 +216,8 @@ void editor_screen_pos(struct font *font, int origin_x, int origin_y, int width,
 
 // Nearest index to a clicked point. Row match is weighted far above
 // column, so a click always lands on the right line first.
-int editor_index_at_point(struct font *font, int origin_x, int origin_y, int width, int click_x, int click_y)
+// base_index: see editor_screen_pos
+int editor_index_at_point(struct font *font, int origin_x, int origin_y, int width, int base_index, int click_x, int click_y)
 {
     int current_x = origin_x;
     int current_y = origin_y;
@@ -216,10 +225,10 @@ int editor_index_at_point(struct font *font, int origin_x, int origin_y, int wid
     int char_h = font->bits_height_per_character;
     int char_w = font->bits_width_per_character;
 
-    int best_index = 0;
+    int best_index = base_index;
     int best_dist = -1;
 
-    for (int i = 0; i <= text_len; i++)
+    for (int i = base_index; i <= text_len; i++)
     {
         int row_diff = click_y - current_y;
         if (row_diff < 0)
@@ -261,16 +270,17 @@ int editor_index_at_point(struct font *font, int origin_x, int origin_y, int wid
     return best_index;
 }
 
-// First character of target_index's row, and that row's y
-void editor_row_start(struct font *font, int origin_x, int origin_y, int width, int target_index, int *out_index, int *out_y)
+// First character of target_index's row, and that row's y.
+// base_index: see editor_screen_pos
+void editor_row_start(struct font *font, int origin_x, int origin_y, int width, int base_index, int target_index, int *out_index, int *out_y)
 {
     int current_x = origin_x;
     int current_y = origin_y;
     int ending_x = origin_x + width;
-    int row_index = 0;
+    int row_index = base_index;
     int row_y = origin_y;
 
-    for (int i = 0; i < target_index && i < text_len; i++)
+    for (int i = base_index; i < target_index && i < text_len; i++)
     {
         if (text[i] == EDITOR_KEY_ENTER)
         {
@@ -292,6 +302,56 @@ void editor_row_start(struct font *font, int origin_x, int origin_y, int width, 
 
     *out_index = row_index;
     *out_y = row_y;
+}
+
+// Character index where line target_line starts (line 0 = document start).
+// Same walk as editor_row_start, just counting rows instead of chasing an index
+int editor_index_of_line(struct font *font, int origin_x, int width, int target_line)
+{
+    if (target_line <= 0)
+    {
+        return 0;
+    }
+
+    int current_x = origin_x;
+    int ending_x = origin_x + width;
+    int line = 0;
+
+    for (int i = 0; i < text_len; i++)
+    {
+        if (text[i] == EDITOR_KEY_ENTER)
+        {
+            current_x = origin_x;
+            line++;
+            if (line == target_line)
+            {
+                return i + 1;
+            }
+            continue;
+        }
+        if (current_x >= ending_x)
+        {
+            current_x = origin_x;
+            line++;
+            if (line == target_line)
+            {
+                return i;
+            }
+        }
+        current_x += font->bits_width_per_character;
+    }
+
+    // Fewer lines in the document than requested: pin to the end
+    return text_len;
+}
+
+// Total number of wrapped/newline rows the document occupies
+int editor_total_lines(struct font *font, int origin_x, int origin_y, int width)
+{
+    int last_row_index = 0;
+    int last_row_y = origin_y;
+    editor_row_start(font, origin_x, origin_y, width, 0, text_len, &last_row_index, &last_row_y);
+    return (last_row_y - origin_y) / font->bits_height_per_character + 1;
 }
 
 // Paints the highlight behind the selected characters, walking the text the way font_draw_text_wrap does.
@@ -344,6 +404,36 @@ void editor_draw_selection(struct graphics *canvas, struct font *font, int origi
     }
 }
 
+// Clamps scroll_line and recomputes scroll_top_index from it. Runs on every
+// redraw since resizing or editing changes how much there is to scroll through.
+void editor_scroll_clamp(struct window *win, struct font *font, int width)
+{
+    int area_bottom = text_bottom(win);
+    int visible_lines = (area_bottom - TEXT_ORIGIN_Y) / font->bits_height_per_character;
+    if (visible_lines < 1)
+    {
+        visible_lines = 1;
+    }
+
+    int total_lines = editor_total_lines(font, EDITOR_MARGIN, TEXT_ORIGIN_Y, width);
+    int max_scroll_line = total_lines - visible_lines;
+    if (max_scroll_line < 0)
+    {
+        max_scroll_line = 0;
+    }
+
+    if (scroll_line > max_scroll_line)
+    {
+        scroll_line = max_scroll_line;
+    }
+    if (scroll_line < 0)
+    {
+        scroll_line = 0;
+    }
+
+    scroll_top_index = editor_index_of_line(font, EDITOR_MARGIN, width, scroll_line);
+}
+
 // Repaints from from_index's row down. Redrawing the whole window per
 // keystroke cost ~480k pixel writes a character.
 void editor_redraw(struct window *win, struct graphics *canvas, struct font *font, int from_index)
@@ -353,19 +443,21 @@ void editor_redraw(struct window *win, struct graphics *canvas, struct font *fon
     int width = win->width - EDITOR_MARGIN * 2;
     int area_bottom = text_bottom(win);
 
-    if (from_index < 0)
+    editor_scroll_clamp(win, font, width);
+
+    if (from_index < scroll_top_index)
     {
-        from_index = 0;
+        from_index = scroll_top_index;
     }
 
     int row_index = 0;
     int row_y = origin_y;
-    editor_row_start(font, origin_x, origin_y, width, from_index, &row_index, &row_y);
+    editor_row_start(font, origin_x, origin_y, width, scroll_top_index, from_index, &row_index, &row_y);
 
     // Clear down to the text, not the window bottom
     int end_x = 0;
     int end_y = 0;
-    editor_screen_pos(font, origin_x, origin_y, width, text_len, &end_x, &end_y);
+    editor_screen_pos(font, origin_x, origin_y, width, scroll_top_index, text_len, &end_x, &end_y);
 
     int bottom = end_y + font->bits_height_per_character;
     if (last_bottom_y > bottom)
@@ -395,8 +487,8 @@ void editor_redraw(struct window *win, struct graphics *canvas, struct font *fon
 
     int cursor_x = 0;
     int cursor_y = 0;
-    editor_screen_pos(font, origin_x, origin_y, width, cursor_index, &cursor_x, &cursor_y);
-    if (!panel_focused && cursor_y + (int)font->bits_height_per_character <= area_bottom)
+    editor_screen_pos(font, origin_x, origin_y, width, scroll_top_index, cursor_index, &cursor_x, &cursor_y);
+    if (!panel_focused && cursor_index >= scroll_top_index && cursor_y + (int)font->bits_height_per_character <= area_bottom)
     {
         graphics_draw_rect(canvas, cursor_x, cursor_y, 2, font->bits_height_per_character, color_ink);
     }
@@ -901,7 +993,7 @@ int main(int argc, char **argv)
                     }
 
                     int previous_cursor = cursor_index;
-                    cursor_index = editor_index_at_point(font, EDITOR_MARGIN, TEXT_ORIGIN_Y, drag_width, event.data.click.x, drag_y);
+                    cursor_index = editor_index_at_point(font, EDITOR_MARGIN, TEXT_ORIGIN_Y, drag_width, scroll_top_index, event.data.click.x, drag_y);
                     if (cursor_index != previous_cursor)
                     {
                         editor_redraw(main_win, canvas, font, previous_cursor < cursor_index ? previous_cursor : cursor_index);
@@ -983,7 +1075,7 @@ int main(int argc, char **argv)
                 redraw_from = old_selection_start < redraw_from ? old_selection_start : redraw_from;
             }
 
-            cursor_index = editor_index_at_point(font, EDITOR_MARGIN, TEXT_ORIGIN_Y, width, click_x, click_y);
+            cursor_index = editor_index_at_point(font, EDITOR_MARGIN, TEXT_ORIGIN_Y, width, scroll_top_index, click_x, click_y);
             // A new selection starts here and grows while the button stays down
             selection_anchor = cursor_index;
             selecting = true;
@@ -1008,6 +1100,26 @@ int main(int argc, char **argv)
                 selection_anchor = -1;
             }
             break;
+
+        case WINDOW_EVENT_TYPE_SCROLL:
+        {
+            // Ignore scrolling over the toolbar or the terminal panel
+            if (event.data.scroll.y < TEXT_ORIGIN_Y || event.data.scroll.y >= text_bottom(main_win))
+            {
+                break;
+            }
+
+            // Positive delta = wheel up, same sign convention as the mouse driver's dy
+            int direction = event.data.scroll.delta > 0 ? -1 : 1;
+            scroll_line += direction * EDITOR_SCROLL_LINES_PER_NOTCH;
+            if (scroll_line < 0)
+            {
+                scroll_line = 0;
+            }
+
+            editor_layout_redraw(main_win, canvas, font);
+            break;
+        }
 
         case WINDOW_EVENT_TYPE_RESIZE:
             // Resize reallocates the body buffer, so re-fetch it. The text

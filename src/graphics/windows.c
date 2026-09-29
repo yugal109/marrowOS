@@ -166,6 +166,27 @@ void window_release(struct window *window, int rel_x, int rel_y)
     window_event_push(window, &event);
 }
 
+void window_scroll(struct window *window, int rel_x, int rel_y, int delta)
+{
+    struct window_event event = {0};
+    event.type = WINDOW_EVENT_TYPE_SCROLL;
+    event.data.scroll.x = rel_x;
+    event.data.scroll.y = rel_y;
+    event.data.scroll.delta = delta;
+    window_event_push(window, &event);
+}
+
+void window_scroll_handler(struct mouse *mouse, int abs_x, int abs_y, int delta)
+{
+    struct window *win = window_get_at_position(abs_x, abs_y, mouse->graphic.window);
+    if (win)
+    {
+        int rel_x = abs_x - win->root_graphics->starting_x;
+        int rel_y = abs_y - win->root_graphics->starting_y;
+        window_scroll(win, rel_x, rel_y, delta);
+    }
+}
+
 void window_release_handler(struct mouse *mouse, int abs_x, int abs_y, MOUSE_CLICK_TYPE type)
 {
     // Button is up, so drop whatever was being dragged
@@ -456,6 +477,7 @@ int window_system_initialize_stage2()
     mouse_register_move_handler(NULL, window_screen_mouse_move_handler);
     mouse_register_click_handler(NULL, window_click_handler);
     mouse_register_release_handler(NULL, window_release_handler);
+    mouse_register_scroll_handler(NULL, window_scroll_handler);
     keyboard_register_handler(NULL, window_keyboard_listener);
     window_dock_initialize();
     return 0;

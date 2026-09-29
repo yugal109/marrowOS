@@ -16,6 +16,10 @@ struct hid_mouse_layout
     uint16_t y_bit;
     uint8_t x_bits;
     uint8_t y_bits;
+    // Not every mouse reports a wheel; check has_wheel before using wheel_bit/wheel_bits
+    bool has_wheel;
+    uint16_t wheel_bit;
+    uint8_t wheel_bits;
     uint16_t total_bits;
 };
 

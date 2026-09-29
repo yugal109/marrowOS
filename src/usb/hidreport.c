@@ -23,6 +23,7 @@
 #define HID_USAGE_PAGE_BUTTON 0x09
 #define HID_USAGE_X 0x30
 #define HID_USAGE_Y 0x31
+#define HID_USAGE_WHEEL 0x38
 
 // Input item data bits
 #define HID_INPUT_CONSTANT (1u << 0)
@@ -53,6 +54,7 @@ bool hid_parse_mouse_layout(const uint8_t *desc, uint16_t len, struct hid_mouse_
 
     bool have_x = false;
     bool have_y = false;
+    bool have_wheel = false;
     bool have_buttons = false;
 
     uint16_t off = 0;
@@ -140,6 +142,13 @@ bool hid_parse_mouse_layout(const uint8_t *desc, uint16_t len, struct hid_mouse_
                             have_y = true;
                             found.y_bit = (uint16_t)field_bit;
                             found.y_bits = (uint8_t)report_size;
+                        }
+                        else if (local_usages[i] == HID_USAGE_WHEEL && !have_wheel)
+                        {
+                            have_wheel = true;
+                            found.has_wheel = true;
+                            found.wheel_bit = (uint16_t)field_bit;
+                            found.wheel_bits = (uint8_t)report_size;
                         }
                     }
                 }

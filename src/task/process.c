@@ -120,6 +120,13 @@ int process_window_event_modify_for_userspace_mouse_move(struct window_event *ev
     return res;
 }
 
+int process_window_event_modify_for_userspace_scroll(struct window_event *event)
+{
+    int res = 0;
+    res = process_window_event_get_relative_window_body_coords(event, &event->data.scroll.x, &event->data.scroll.y);
+    return res;
+}
+
 int process_window_event_modify_for_userspace(struct window_event *event)
 {
     int res = 0;
@@ -131,6 +138,10 @@ int process_window_event_modify_for_userspace(struct window_event *event)
 
     case WINDOW_EVENT_TYPE_MOUSE_MOVE:
         res = process_window_event_modify_for_userspace_mouse_move(event);
+        break;
+
+    case WINDOW_EVENT_TYPE_SCROLL:
+        res = process_window_event_modify_for_userspace_scroll(event);
         break;
     }
     return res;

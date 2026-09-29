@@ -85,11 +85,6 @@ void ps2_mouse_handle_interrupt(struct interrupt_frame *frame)
         scroll = (int8_t)packet[3];
     }
 
-    if (scroll && left_button && right_button && middle_button)
-    {
-        // supress warnings.
-    }
-
     int x_result = (int)ps2_mouse.coords.x + dx;
     int y_result = (int)ps2_mouse.coords.y + dy;
     struct graphics_info *screen = graphics_screen_info();
@@ -119,6 +114,10 @@ void ps2_mouse_handle_interrupt(struct interrupt_frame *frame)
     {
         click_type = MOUSE_RIGHT_BUTTON_CLICKED;
     }
+    else if (middle_button)
+    {
+        click_type = MOUSE_MIDDLE_BUTTON_CLICKED;
+    }
 
     if (click_type != MOUSE_NO_CLICK)
     {
@@ -133,6 +132,11 @@ void ps2_mouse_handle_interrupt(struct interrupt_frame *frame)
     ps2_mouse_prev_click_type = click_type;
 
     mouse_moved(&ps2_mouse);
+
+    if (scroll != 0)
+    {
+        mouse_scrolled(&ps2_mouse, scroll);
+    }
     return;
 }
 
