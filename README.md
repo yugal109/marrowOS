@@ -8,7 +8,7 @@
 
 </div>
 
-I started this on 26 July 2026 with a bootloader and a blinking cursor. Today it boots through UEFI, draws a 1920 x 1080 desktop, runs a mouse driven window manager, loads userland programs off an NVMe drive, and ships with a scripting language I wrote for it called Rain.
+It started as a bootloader and a blinking cursor. Today it boots through UEFI, draws a 1920 x 1080 desktop, runs a mouse driven window manager, loads userland programs off an NVMe drive, and ships with a scripting language I wrote for it called Rain.
 
 No Linux underneath. No libc from somewhere else. No borrowed kernel. Every driver, every syscall, every pixel on that screen is code in this repo. The only thing I did not write is the firmware that hands me the framebuffer.
 
@@ -191,15 +191,6 @@ programs/     userland
 data/images/  wallpaper, icons, cursor, fonts
 docs/         screenshots
 ```
-
-## How it got here
-
-* **July** was the foundations: heap, paging, FAT16, the VFS
-* **Early August** brought the GDT and TSS, userland, syscalls, the ELF loader, a shell, multitasking
-* **23 August** was the jump from 32 bit protected mode to 64 bit long mode
-* **September** was the big one: UEFI and a framebuffer, BMP and fonts, the window manager, PCI, NVMe, the GUI toolkit, xHCI and USB HID, the settings app, the editor and Rain, mouse scrolling
-
-Over 180 commits and still going.
 
 ## What is not done yet
 
